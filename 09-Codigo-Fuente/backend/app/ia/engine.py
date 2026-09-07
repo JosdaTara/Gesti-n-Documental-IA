@@ -10,6 +10,7 @@ LLM configurado) y con OPENAI_API_KEY usa OpenAI como alternativa.
 import hashlib
 import json
 import logging
+import random
 import re
 import time
 from pathlib import Path
@@ -90,7 +91,7 @@ def _gemini_post(url: str, payload: dict, intentos: int = 3) -> dict:
         if resp.status_code in (429, 500, 502, 503, 504):
             ultimo = resp.status_code
             logger.warning("Gemini HTTP %s (intento %d/%d)", resp.status_code, intento + 1, intentos)
-            time.sleep(1.0 * (intento + 1))
+            time.sleep((intento + 1) * 1.2 + random.uniform(0, 0.6))
             continue
         resp.raise_for_status()
         return resp.json()
@@ -286,13 +287,23 @@ def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
         try:
             return _generar_respuesta_gemini(pregunta, fuentes)
         except Exception:
-            logger.warning("Gemini falló en generación; intentando OpenAI/demo", exc_info=True)
+            logger.warning("Gemini falló en generación; intentando siguientes", exc_info=True)
     if settings.openai_api_key:
         try:
             return _generar_respuesta_llm(pregunta, fuentes)
         except Exception:
-            logger.warning("OpenAI falló en generación; usando demo", exc_info=True)
-    return _generar_respuesta_demo(pregunta, fuentes)
+            logger.warning("OpenAI falló en generación", exc_info=True)
+
+    # Sin API key configurada: modo demo determinístico.
+    if not settings.gemini_api_key and not settings.openai_api_key:
+        return _generar_respuesta_demo(pregunta, fuentes)
+
+    # Proveedor configurado pero no disponible: avisar sin usar modo demo.
+    return (
+        "Lo siento, el motor de IA está temporalmente no disponible (falló la "
+        "comunicación con el proveedor). Por favor vuelve a intentar tu consulta "
+        "en unos segundos."
+    )
 
 
 def _generar_respuesta_gemini(pregunta: str, fuentes: list[dict]) -> str:
