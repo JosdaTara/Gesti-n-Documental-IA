@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../components/Toasts";
+import Logo from "../components/Logo";
 import { errorMessage } from "../context/AuthContext";
 
 export default function Login() {
@@ -35,7 +36,9 @@ export default function Login() {
     <div className="auth">
       <aside className="auth__side">
         <Link to="/" className="brand">
-          <span className="brand__mark">SIG</span>
+          <span className="brand__mark">
+            <Logo size={21} />
+          </span>
           <span>SIGAD</span>
         </Link>
         <div className="auth__side-quote gradient-text">

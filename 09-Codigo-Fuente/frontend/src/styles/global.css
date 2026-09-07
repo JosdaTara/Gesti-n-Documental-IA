@@ -453,16 +453,13 @@ p { margin: 0 0 1rem; }
 }
 
 .brand__mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  background: var(--gradient);
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   color: #fff;
   font-weight: 900;
   font-size: 0.9rem;
-  box-shadow: var(--shadow-md);
 }
 
 .nav__links {
@@ -1360,6 +1357,73 @@ p { margin: 0 0 1rem; }
 
 .typing span:nth-child(2) { animation-delay: 0.15s; }
 .typing span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ---------- Indicador de IA "pensando" ---------- */
+
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 26px;
+}
+
+.ai-orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.ai-orbit i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--primary) 30%, transparent),
+    transparent 72%
+  );
+  animation: aiRing 1.8s ease-out infinite;
+}
+
+.ai-orbit svg {
+  position: relative;
+  animation: aiFloat 2.4s ease-in-out infinite;
+}
+
+.ai-status {
+  font-size: 0.86rem;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  animation: aiFadeSwap 0.38s var(--ease);
+}
+
+@keyframes aiRing {
+  0% { transform: scale(0.62); opacity: 0.85; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+
+@keyframes aiFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+
+@keyframes aiFadeSwap {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-orbit i,
+  .ai-orbit svg,
+  .ai-status,
+  .typing span {
+    animation: none !important;
+  }
+}
 
 .chat-input {
   display: flex;

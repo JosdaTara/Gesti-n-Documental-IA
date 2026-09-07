@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { api, RespuestaRag, errorMessage } from "../services/api";
 import { useToast } from "../components/Toasts";
 import { ChatSkeleton } from "../components/Skeleton";
+import Logo from "../components/Logo";
 import { IconArrowRight } from "../components/Icons";
 
 interface Mensaje {
@@ -16,6 +17,12 @@ const SUGERENCIAS = [
   "¿Qué contratos están vigentes?",
   "Resumen de las órdenes de compra",
   "¿Qué documentos hablan sobre facturación?",
+];
+
+const FASES_PENSANDO = [
+  "Recuperando documentos…",
+  "Analizando el contexto…",
+  "Redactando la respuesta…",
 ];
 
 let msgId = 1;
@@ -134,11 +141,7 @@ export default function Chat() {
                 ))}
                 {cargando && (
                   <div className="chat-bubble chat-bubble--ai">
-                    <div className="typing" aria-label="El asistente está escribiendo">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
+                    <AiThinking />
                   </div>
                 )}
               </div>
@@ -157,6 +160,32 @@ function IconChatInline() {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       <path d="M8 9h8M8 13h5" />
     </svg>
+  );
+}
+
+function AiThinking() {
+  const [fase, setFase] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setFase((f) => (f + 1) % FASES_PENSANDO.length), 2200);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="chat-thinking" role="status" aria-live="polite">
+      <span className="ai-orbit" aria-hidden="true">
+        <i />
+        <Logo size={20} />
+      </span>
+      <span className="ai-status" key={fase}>
+        {FASES_PENSANDO[fase]}
+      </span>
+      <span className="typing" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ThemeToggle from "./ThemeToggle";
+import Logo from "./Logo";
 import { IconLogout, IconArrowRight } from "./Icons";
 
 export default function Navbar() {
@@ -17,8 +18,10 @@ export default function Navbar() {
   }, []);
 
   const logo = (
-    <Link to="/" className="brand" onClick={() => setOpen(false)}>
-      <span className="brand__mark">SIG</span>
+<Link to="/" className="brand" onClick={() => setOpen(false)}>
+        <span className="brand__mark">
+          <Logo size={21} />
+        </span>
       <span>
         SIGAD
         <span className="muted" style={{ fontWeight: 600, fontSize: "0.82rem", marginLeft: 8 }}>
