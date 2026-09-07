@@ -91,7 +91,11 @@ def _gemini_post(url: str, payload: dict, intentos: int = 3) -> dict:
         if resp.status_code in (429, 500, 502, 503, 504):
             ultimo = resp.status_code
             logger.warning("Gemini HTTP %s (intento %d/%d)", resp.status_code, intento + 1, intentos)
-            time.sleep((intento + 1) * 1.2 + random.uniform(0, 0.6))
+            espera = (intento + 1) * 1.2 + random.uniform(0, 0.6)
+            retry_after = resp.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                espera = max(espera, float(retry_after))
+            time.sleep(espera)
             continue
         resp.raise_for_status()
         return resp.json()
@@ -142,6 +146,8 @@ def embed_json(text: str) -> str:
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    if a.ndim != 1 or b.ndim != 1 or a.shape != b.shape:
+        return 0.0
     na = np.linalg.norm(a)
     nb = np.linalg.norm(b)
     if na == 0 or nb == 0:
@@ -306,21 +312,57 @@ def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
     )
 
 
+# Modelos Gemini en orden de prioridad: el primero usa más cuota, el último es
+# el más estable. Fallback automático si un modelo falla (429/503/error).
+_GEMINI_LLM_ALIASES = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+]
+
+_ULTIMO_MODELO_GEMINI: str | None = None
+
+
 def _generar_respuesta_gemini(pregunta: str, fuentes: list[dict]) -> str:
-    url = (
-        f"{_GEMINI_BASE}/models/{settings.gemini_llm_model}:generateContent"
-        f"?key={settings.gemini_api_key}"
-    )
     contexto = "\n\n".join(
         f"Documento: {f['documento']}\n{f['fragmento']}" for f in fuentes[:5]
     )
     payload = {
         "system_instruction": {"parts": [{"text": CITA_INSTRUCT}]},
         "contents": [{"parts": [{"text": f"Contexto:\n{contexto}\n\nPregunta: {pregunta}"}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800},
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 800,
+            "thinkingConfig": {"includeThoughts": False},
+        },
     }
-    data = _gemini_post(url, payload)
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    global _ULTIMO_MODELO_GEMINI
+    modelos = _GEMINI_LLM_ALIASES
+    if _ULTIMO_MODELO_GEMINI in modelos:
+        modelos = [_ULTIMO_MODELO_GEMINI] + [m for m in modelos if m != _ULTIMO_MODELO_GEMINI]
+
+    ultimo_error: Exception | None = None
+    for modelo in modelos:
+        url = (
+            f"{_GEMINI_BASE}/models/{modelo}:generateContent"
+            f"?key={settings.gemini_api_key}"
+        )
+        try:
+            data = _gemini_post(url, payload, intentos=2)
+        except Exception as exc:
+            ultimo_error = exc
+            logger.warning("Gemini modelo %s falló; probando siguiente", modelo)
+            time.sleep(0.5)
+            continue
+        texto = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if texto:
+            _ULTIMO_MODELO_GEMINI = modelo
+            return texto
+
+    if ultimo_error is not None:
+        raise ultimo_error
+    raise RuntimeError("Gemini devolvió una respuesta vacía")
 
 
 def _generar_respuesta_llm(pregunta: str, fuentes: list[dict]) -> str:
