@@ -1,0 +1,65 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: sigad-db
+    environment:
+      POSTGRES_DB: sigad
+      POSTGRES_USER: sigad
+      POSTGRES_PASSWORD: sigad2026
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sigad -d sigad"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: sigad-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: sigadmin
+      MINIO_ROOT_PASSWORD: sigadmin2026
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: sigad-backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://sigad:sigad2026@db:5432/sigad
+      SECRET_KEY: ${SECRET_KEY:-cambiar-por-una-clave-larga-y-aleatoria}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      STORAGE_PATH: /data/storage
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+    volumes:
+      - storage_data:/data/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: sigad-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  minio_data:
+  storage_data:
