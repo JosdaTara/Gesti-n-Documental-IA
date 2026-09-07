@@ -4,12 +4,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models import Chunk, Documento, Usuario
+from app.models import Categoria, Chunk, Documento, Usuario
 from app.schemas import ClasificacionIn, DocumentoDetail, DocumentoOut, EstadoDocumento
 from app.services import documento_detail, documento_out, procesar_documento, reasignar_categoria, registrar_auditoria
 
@@ -89,7 +90,7 @@ def listar_documentos(
     if estado:
         query = query.filter(Documento.estado == estado)
     if categoria:
-        query = query.filter(Documento.categoria.has(nombre=categoria.lower()))
+        query = query.filter(Documento.categoria.has(func.lower(Categoria.nombre) == categoria.lower()))
     if q:
         like = f"%{q.lower()}%"
         query = query.filter(Documento.nombre_archivo.ilike(like))

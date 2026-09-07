@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { api, ResultadoBusqueda, errorMessage } from "../services/api";
+import { useEffect, useState, type FormEvent } from "react";
+import { api, Categoria, ResultadoBusqueda, errorMessage } from "../services/api";
 import { useToast } from "../components/Toasts";
 import { EmptyState } from "../components/Skeleton";
 import { IconDocument, IconSearch } from "../components/Icons";
@@ -10,10 +10,15 @@ export default function Busqueda() {
   const [q, setQ] = useState("");
   const [tipo, setTipo] = useState<TipoBusqueda>("semantica");
   const [categoria, setCategoria] = useState("");
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [resultados, setResultados] = useState<ResultadoBusqueda[]>([]);
   const [loading, setLoading] = useState(false);
   const [buscado, setBuscado] = useState(false);
   const { error } = useToast();
+
+  useEffect(() => {
+    api.get<Categoria[]>("/categorias").then((res) => setCategorias(res.data)).catch(() => undefined);
+  }, []);
 
   const buscar = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -72,11 +77,9 @@ export default function Busqueda() {
           </div>
           <select className="select" style={{ width: "auto", minWidth: 170 }} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             <option value="">Todas las categorías</option>
-            <option value="factura">Factura</option>
-            <option value="guia_despacho">Guía de despacho</option>
-            <option value="orden_compra">Orden de compra</option>
-            <option value="contrato">Contrato</option>
-            <option value="acta_recepcion">Acta de recepción</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.nombre}>{c.nombre}</option>
+            ))}
           </select>
         </div>
       </div>

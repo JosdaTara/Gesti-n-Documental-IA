@@ -11,11 +11,11 @@ from app.core.security import hash_password
 from app.models import Categoria, Documento, Usuario
 
 CATEGORIAS = [
-    ("factura", "Comprobante comercial de venta o cobro"),
-    ("guia_despacho", "Documento que acompaña el envío físico de mercancía"),
-    ("orden_compra", "Solicitud formal de compra de productos o servicios"),
-    ("contrato", "Acuerdo legal entre dos o más partes"),
-    ("acta_recepcion", "Constancia de entrega y recepción conforme"),
+    ("FACTURA", "Comprobante comercial de venta o cobro"),
+    ("GUIA_DESPACHO", "Documento que acompaña el envío físico de mercancía"),
+    ("ORDEN_COMPRA", "Solicitud formal de compra de productos o servicios"),
+    ("CONTRATO", "Acuerdo legal entre dos o más partes"),
+    ("ACTA_RECEPCION", "Constancia de entrega y recepción conforme"),
 ]
 
 DOCUMENTOS_DEMO = [
@@ -77,11 +77,11 @@ def crear_documentos_demo(db: Session) -> None:
         return
 
     categorias: dict[str, int] = {
-        c.nombre: c.id for c in db.query(Categoria).all()
+        c.nombre.lower(): c.id for c in db.query(Categoria).all()
     }
     if not categorias:
         crear_categorias(db)
-        categorias = {c.nombre: c.id for c in db.query(Categoria).all()}
+        categorias = {c.nombre.lower(): c.id for c in db.query(Categoria).all()}
 
     for nombre, categoria, carpeta, tamano, texto in DOCUMENTOS_DEMO:
         ruta = Path(settings.storage_path) / carpeta

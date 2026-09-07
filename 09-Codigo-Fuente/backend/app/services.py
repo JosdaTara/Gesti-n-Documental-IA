@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import ensure_storage
@@ -25,7 +26,9 @@ def procesar_documento(db: Session, documento: Documento) -> None:
     categoria = None
     if categoria_key:
         categoria = (
-            db.query(Categoria).filter(Categoria.nombre == categoria_key, Categoria.activa.is_(True)).first()
+            db.query(Categoria)
+            .filter(func.lower(Categoria.nombre) == categoria_key, Categoria.activa.is_(True))
+            .first()
         )
     documento.categoria_id = categoria.id if categoria else None
     documento.confianza = confianza

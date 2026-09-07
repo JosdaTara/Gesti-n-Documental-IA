@@ -2,11 +2,12 @@ import json
 
 import numpy as np
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.ia.engine import cosine_similarity, get_embedding
-from app.models import Chunk, Documento
+from app.models import Categoria, Chunk, Documento
 from app.schemas import BusquedaOut
 
 router = APIRouter(prefix="/busqueda", tags=["busqueda"])
@@ -24,7 +25,7 @@ def buscar(
         Documento.estado == "procesado", Chunk.activo.is_(True)
     )
     if categoria:
-        query = query.filter(Documento.categoria.has(nombre=categoria.lower()))
+        query = query.filter(Documento.categoria.has(func.lower(Categoria.nombre) == categoria.lower()))
 
     if tipo == "keyword":
         return _buscar_keyword(query, q, limite)

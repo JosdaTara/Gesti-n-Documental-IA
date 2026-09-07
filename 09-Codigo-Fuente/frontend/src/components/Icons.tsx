@@ -159,6 +159,14 @@ export function IconCheck(props: IconProps) {
   );
 }
 
+export function IconPlus(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Base>
+  );
+}
+
 export function IconSettings(props: IconProps) {
   return (
     <Base {...props}>

@@ -47,7 +47,7 @@ def test_categorias_disponibles():
     response = client.get("/api/categorias")
     assert response.status_code == 200
     nombres = {c["nombre"] for c in response.json()}
-    assert {"factura", "guia_despacho", "orden_compra", "contrato", "acta_recepcion"} <= nombres
+    assert {"FACTURA", "GUIA_DESPACHO", "ORDEN_COMPRA", "CONTRATO", "ACTA_RECEPCION"} <= nombres
 
 
 def test_dashboard_admin():
@@ -99,7 +99,7 @@ def test_subir_y_clasificar_documento():
     assert response.status_code == 201, response.text
     data = response.json()
     assert data["estado"] == "procesado"
-    assert data["categoria"] == "factura"
+    assert data["categoria"] == "FACTURA"
     assert data["confianza"] and data["confianza"] >= 0.7
 
     detail = client.get(f"/api/documentos/{data['id']}", headers=_auth())

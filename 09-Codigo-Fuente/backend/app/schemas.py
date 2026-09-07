@@ -43,6 +43,11 @@ class UsuarioOut(BaseModel):
     ultimo_acceso: str | None = None
 
 
+class CategoriaIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=60)
+    descripcion: str = Field(default="", max_length=200)
+
+
 class CategoriaOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { api, Categoria, Documento, EstadoDocumento, errorMessage } from "../services/api";
 import { useToast } from "../components/Toasts";
 import Modal from "../components/Modal";
 import { DocumentoSkeleton, EmptyState } from "../components/Skeleton";
+import { useAuth } from "../context/AuthContext";
 import {
   IconDocument,
   IconDownload,
+  IconPlus,
   IconSearch,
   IconTrash,
   IconUpload,
@@ -41,8 +43,14 @@ export default function Documentos() {
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [q, setQ] = useState("");
   const [detalle, setDetalle] = useState<Documento | null>(null);
+  const [muestraNuevaCategoria, setMuestraNuevaCategoria] = useState(false);
+  const [nuevaCatNombre, setNuevaCatNombre] = useState("");
+  const [nuevaCatDescripcion, setNuevaCatDescripcion] = useState("");
+  const [creandoCategoria, setCreandoCategoria] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { success, error } = useToast();
+  const { usuario } = useAuth();
+  const esAdmin = usuario?.rol === "administrador";
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -67,6 +75,30 @@ export default function Documentos() {
   useEffect(() => {
     api.get<Categoria[]>("/categorias").then((res) => setCategorias(res.data)).catch(() => undefined);
   }, []);
+
+  const crearCategoria = async (e: FormEvent) => {
+    e.preventDefault();
+    const nombre = nuevaCatNombre.trim();
+    if (nombre.length < 2) {
+      error("El nombre de la categoría debe tener al menos 2 caracteres.");
+      return;
+    }
+    setCreandoCategoria(true);
+    try {
+      await api.post("/categorias", { nombre, descripcion: nuevaCatDescripcion.trim() });
+      success(`Categoría «${nombre.toUpperCase()}» creada`);
+      setNuevaCatNombre("");
+      setNuevaCatDescripcion("");
+      setMuestraNuevaCategoria(false);
+      const res = await api.get<Categoria[]>("/categorias");
+      setCategorias(res.data);
+      if (filtroCategoria) setFiltroCategoria("");
+    } catch (err) {
+      error(errorMessage(err));
+    } finally {
+      setCreandoCategoria(false);
+    }
+  };
 
   const handleFile = async (file: File) => {
     setUploading(true);
@@ -144,10 +176,18 @@ export default function Documentos() {
           <h1 className="page__title">Documentos</h1>
           <p className="page__sub">Carga, clasifica y gestiona la base documental.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => inputRef.current?.click()}>
-          <IconUpload width={17} height={17} />
-          Subir documento
-        </button>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          {esAdmin && (
+            <button className="btn btn-outline" onClick={() => setMuestraNuevaCategoria(true)}>
+              <IconPlus width={16} height={16} />
+              Nueva categoría
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => inputRef.current?.click()}>
+            <IconUpload width={17} height={17} />
+            Subir documento
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -284,6 +324,43 @@ export default function Documentos() {
             );
           })}
         </div>
+      )}
+
+      {muestraNuevaCategoria && (
+        <Modal title="Nueva categoría" onClose={() => setMuestraNuevaCategoria(false)}>
+          <form onSubmit={(e) => void crearCategoria(e)}>
+            <div className="field">
+              <label className="label">Nombre</label>
+              <input
+                className="input"
+                placeholder="Ej: RECIBO_CAJA"
+                value={nuevaCatNombre}
+                onChange={(e) => setNuevaCatNombre(e.target.value)}
+                autoFocus
+              />
+              <p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.3rem" }}>
+                Se guardará y mostrará en mayúsculas.
+              </p>
+            </div>
+            <div className="field">
+              <label className="label">Descripción</label>
+              <input
+                className="input"
+                placeholder="Describe brevemente esta categoría (opcional)"
+                value={nuevaCatDescripcion}
+                onChange={(e) => setNuevaCatDescripcion(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.4rem" }}>
+              <button className="btn btn-ghost btn-block" type="button" onClick={() => setMuestraNuevaCategoria(false)}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary btn-block" type="submit" disabled={creandoCategoria}>
+                {creandoCategoria ? "Creando…" : "Crear categoría"}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {detalle && (
