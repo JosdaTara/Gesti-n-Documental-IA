@@ -4,6 +4,8 @@ import tempfile
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test_sigad.db"
 os.environ["DEMO_MODE"] = "false"
 os.environ["SECRET_KEY"] = "clave-de-prueba"
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["OPENAI_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

@@ -1,20 +1,23 @@
 """Motor de IA de SIGAD.
 
 Abstrae OCR, extracción, embeddings, RAG, clasificación y resumen.
-Cuando no hay OPENAI_API_KEY opera en modo demo determinístico: embeddings
-por hashing y respuestas basadas en plantillas con los fragmentos más
-relevantes (sin llamadas externas). Con API key usa texto-embedding-3-small
-y el LLM configurado (gpt-4o-mini por defecto).
+Sin API key opera en modo demo determinístico: embeddings por hashing y
+respuestas basadas en plantillas con los fragmentos más relevantes (sin
+llamadas externas). Con GEMINI_API_KEY usa Gemini (text-embedding-004 y el
+LLM configurado) y con OPENAI_API_KEY usa OpenAI como alternativa.
 """
 
 import hashlib
 import json
+import logging
 import re
 from pathlib import Path
 
 import numpy as np
 
 from app.core.config import settings
+
+logger = logging.getLogger("sigad.ia")
 
 CATEGORIAS = {
     "factura": {
@@ -65,26 +68,59 @@ def _demo_embed(text: str, dim: int = DEMO_DIM) -> np.ndarray:
     return vector / norm if norm > 0 else vector
 
 
+_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+_gemini_client = None
+
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        import httpx
+
+        _gemini_client = httpx.Client(timeout=90)
+    return _gemini_client
+
+
+def _gemini_embed(text: str) -> np.ndarray:
+    url = (
+        f"{_GEMINI_BASE}/models/{settings.gemini_embedding_model}:embedContent"
+        f"?key={settings.gemini_api_key}"
+    )
+    resp = _get_gemini_client().post(
+        url, json={"content": {"parts": [{"text": text}]}}
+    )
+    resp.raise_for_status()
+    return np.asarray(resp.json()["embedding"]["values"], dtype=np.float32)
+
+
+def _openai_embed(text: str) -> np.ndarray:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    resp = client.embeddings.create(model=settings.openai_embedding_model, input=[text])
+    return np.asarray(resp.data[0].embedding, dtype=np.float32)
+
+
+def _make_embedding_fn():
+    if settings.gemini_api_key:
+        return _gemini_embed
+    if settings.openai_api_key:
+        return _openai_embed
+    return _demo_embed
+
+
 _EMBEDDING_FN = None
 
 
 def get_embedding(text: str) -> np.ndarray:
     global _EMBEDDING_FN
     if _EMBEDDING_FN is None:
-        if settings.openai_api_key:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=settings.openai_api_key)
-            model = settings.openai_embedding_model
-
-            def openai_embed(inner_text: str) -> np.ndarray:
-                resp = client.embeddings.create(model=model, input=[inner_text])
-                return np.asarray(resp.data[0].embedding, dtype=np.float32)
-
-            _EMBEDDING_FN = openai_embed
-        else:
-            _EMBEDDING_FN = _demo_embed
-    return np.asarray(_EMBEDDING_FN(text), dtype=np.float32)
+        _EMBEDDING_FN = _make_embedding_fn()
+    try:
+        return np.asarray(_EMBEDDING_FN(text), dtype=np.float32)
+    except Exception as exc:  # API caída o sin red → demo determinístico
+        logger.warning("Embedding real falló (%s); usando modo demo", exc)
+        return _demo_embed(text)
 
 
 def embed_json(text: str) -> str:
@@ -227,12 +263,36 @@ CITA_INSTRUCT = (
 
 def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
     """Genera una respuesta a partir de los fragmentos recuperados."""
+    if settings.gemini_api_key:
+        try:
+            return _generar_respuesta_gemini(pregunta, fuentes)
+        except Exception:
+            logger.warning("Gemini falló en generación; intentando OpenAI/demo", exc_info=True)
     if settings.openai_api_key:
         try:
             return _generar_respuesta_llm(pregunta, fuentes)
         except Exception:
-            pass
+            logger.warning("OpenAI falló en generación; usando demo", exc_info=True)
     return _generar_respuesta_demo(pregunta, fuentes)
+
+
+def _generar_respuesta_gemini(pregunta: str, fuentes: list[dict]) -> str:
+    url = (
+        f"{_GEMINI_BASE}/models/{settings.gemini_llm_model}:generateContent"
+        f"?key={settings.gemini_api_key}"
+    )
+    contexto = "\n\n".join(
+        f"Documento: {f['documento']}\n{f['fragmento']}" for f in fuentes[:5]
+    )
+    payload = {
+        "system_instruction": {"parts": [{"text": CITA_INSTRUCT}]},
+        "contents": [{"parts": [{"text": f"Contexto:\n{contexto}\n\nPregunta: {pregunta}"}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 600},
+    }
+    resp = _get_gemini_client().post(url, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 def _generar_respuesta_llm(pregunta: str, fuentes: list[dict]) -> str:
@@ -276,7 +336,7 @@ def _generar_respuesta_demo(pregunta: str, fuentes: list[dict]) -> str:
         texto += f" También encontré referencias en {refs}."
     texto += (
         "\n\nEsta respuesta fue generada en modo demo (sin LLM externo). "
-        "Configura OPENAI_API_KEY para obtener respuestas sintetizadas por el modelo."
+        "Configura GEMINI_API_KEY u OPENAI_API_KEY para respuestas sintetizadas."
     )
     _demo_cache[clave] = texto
     return texto

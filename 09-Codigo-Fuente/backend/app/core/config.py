@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_llm_model: str = "gpt-4o-mini"
 
+    gemini_api_key: str = ""
+    gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_llm_model: str = "gemini-3.5-flash-lite"
+
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @field_validator("cors_origins", mode="before")

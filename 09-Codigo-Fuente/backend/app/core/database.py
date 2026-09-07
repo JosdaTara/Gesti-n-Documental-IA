@@ -15,10 +15,22 @@ def _is_postgres(url: str) -> bool:
     return url.startswith("postgresql")
 
 
+def _is_mysql(url: str) -> bool:
+    return url.startswith("mysql")
+
+
 IS_POSTGRES = _is_postgres(settings.database_url)
+IS_MYSQL = _is_mysql(settings.database_url)
 
 if IS_POSTGRES:
     engine = create_engine(settings.database_url, pool_pre_ping=True, pool_size=10)
+elif IS_MYSQL:
+    engine = create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        pool_size=10,
+    )
 else:
     engine = create_engine(
         settings.database_url,

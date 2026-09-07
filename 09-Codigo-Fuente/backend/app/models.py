@@ -1,9 +1,13 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+EmbeddingType = Text().with_variant(MEDIUMTEXT, "mysql")
 
 
 class Usuario(Base):
@@ -74,7 +78,7 @@ class Chunk(Base):
     documento_id: Mapped[int] = mapped_column(ForeignKey("documentos.id", ondelete="CASCADE"), index=True)
     indice: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     contenido: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[str] = mapped_column(Text, nullable=True)  # vector JSON; pgvector en producción
+    embedding: Mapped[str] = mapped_column(EmbeddingType, nullable=True)  # vector JSON (MEDIUMTEXT en MySQL)
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     documento: Mapped[Documento] = relationship(back_populates="chunks")
