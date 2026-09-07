@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
 import numpy as np
@@ -81,16 +82,28 @@ def _get_gemini_client():
     return _gemini_client
 
 
+def _gemini_post(url: str, payload: dict, intentos: int = 3) -> dict:
+    """POST con reintentos ante errores transitorios (429/5xx)."""
+    ultimo: int | None = None
+    for intento in range(intentos):
+        resp = _get_gemini_client().post(url, json=payload)
+        if resp.status_code in (429, 500, 502, 503, 504):
+            ultimo = resp.status_code
+            logger.warning("Gemini HTTP %s (intento %d/%d)", resp.status_code, intento + 1, intentos)
+            time.sleep(1.0 * (intento + 1))
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"Gemini sin respuesta tras {intentos} intentos (último HTTP {ultimo})")
+
+
 def _gemini_embed(text: str) -> np.ndarray:
     url = (
         f"{_GEMINI_BASE}/models/{settings.gemini_embedding_model}:embedContent"
         f"?key={settings.gemini_api_key}"
     )
-    resp = _get_gemini_client().post(
-        url, json={"content": {"parts": [{"text": text}]}}
-    )
-    resp.raise_for_status()
-    return np.asarray(resp.json()["embedding"]["values"], dtype=np.float32)
+    data = _gemini_post(url, {"content": {"parts": [{"text": text}]}})
+    return np.asarray(data["embedding"]["values"], dtype=np.float32)
 
 
 def _openai_embed(text: str) -> np.ndarray:
@@ -255,9 +268,15 @@ def resumir(text: str, max_chars: int = 420) -> str:
 _demo_cache: dict[str, str] = {}
 
 CITA_INSTRUCT = (
-    "Responde en español usando exclusivamente el contexto proporcionado. "
-    "Cita al final las fuentes entre paréntesis con el nombre del documento. "
-    "Si el contexto no responde la pregunta, indícalo con claridad."
+    "Eres el asistente de SIGAD, un sistema de gestión documental de una empresa de distribución. "
+    "Responde en español de forma clara, estructurada y profesional, usando EXCLUSIVAMENTE la "
+    "información del contexto proporcionado.\n"
+    "Reglas:\n"
+    "- Si la pregunta admite una lista, responde con una lista numerada con los datos exactos.\n"
+    "- Distingue los datos de cada documento y evita mezclar información de orígenes distintos.\n"
+    "- Cita al final las fuentes entre paréntesis con el nombre exacto del documento.\n"
+    "- Si el contexto no contiene la respuesta, indícalo con claridad y NO inventes datos.\n"
+    "- Si el contexto deja ver información contradictoria, señálalo."
 )
 
 
@@ -287,11 +306,9 @@ def _generar_respuesta_gemini(pregunta: str, fuentes: list[dict]) -> str:
     payload = {
         "system_instruction": {"parts": [{"text": CITA_INSTRUCT}]},
         "contents": [{"parts": [{"text": f"Contexto:\n{contexto}\n\nPregunta: {pregunta}"}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 600},
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800},
     }
-    resp = _get_gemini_client().post(url, json=payload)
-    resp.raise_for_status()
-    data = resp.json()
+    data = _gemini_post(url, payload)
     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
