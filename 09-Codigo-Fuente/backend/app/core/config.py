@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_llm_model: str = "gemini-3.5-flash"
 
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_embedding_model: str = "openai/text-embedding-3-large"
+    openrouter_llm_model: str = "openrouter/auto"
+
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @field_validator("cors_origins", mode="before")

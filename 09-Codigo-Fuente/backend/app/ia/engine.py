@@ -119,7 +119,53 @@ def _openai_embed(text: str) -> np.ndarray:
     return np.asarray(resp.data[0].embedding, dtype=np.float32)
 
 
+_openrouter_client = None
+
+
+def _get_openrouter_client():
+    global _openrouter_client
+    if _openrouter_client is None:
+        import httpx
+
+        _openrouter_client = httpx.Client(timeout=120)
+    return _openrouter_client
+
+
+def _openrouter_post(url: str, payload: dict, intentos: int = 3) -> dict:
+    """POST a OpenRouter (API compatible con OpenAI) con reintentos."""
+    ultimo: int | None = None
+    for intento in range(intentos):
+        resp = _get_openrouter_client().post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.openrouter_api_key}", "X-Title": "SIGAD"},
+        )
+        if resp.status_code in (429, 500, 502, 503, 504):
+            ultimo = resp.status_code
+            logger.warning("OpenRouter HTTP %s (intento %d/%d)", resp.status_code, intento + 1, intentos)
+            espera = (intento + 1) * 1.2 + random.uniform(0, 0.6)
+            retry_after = resp.headers.get("Retry-After")
+            if retry_after and retry_after.isdigit():
+                espera = max(espera, float(retry_after))
+            time.sleep(espera)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"OpenRouter sin respuesta tras {intentos} intentos (último HTTP {ultimo})")
+
+
+def _openrouter_embed(text: str) -> np.ndarray:
+    url = f"{settings.openrouter_base_url}/embeddings"
+    data = _openrouter_post(
+        url,
+        {"model": settings.openrouter_embedding_model, "input": [text[:8000]]},
+    )
+    return np.asarray(data["data"][0]["embedding"], dtype=np.float32)
+
+
 def _make_embedding_fn():
+    if settings.openrouter_api_key:
+        return _openrouter_embed
     if settings.gemini_api_key:
         return _gemini_embed
     if settings.openai_api_key:
@@ -289,6 +335,11 @@ CITA_INSTRUCT = (
 
 def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
     """Genera una respuesta a partir de los fragmentos recuperados."""
+    if settings.openrouter_api_key:
+        try:
+            return _generar_respuesta_openrouter(pregunta, fuentes)
+        except Exception:
+            logger.warning("OpenRouter falló en generación; intentando siguientes", exc_info=True)
     if settings.gemini_api_key:
         try:
             return _generar_respuesta_gemini(pregunta, fuentes)
@@ -301,7 +352,7 @@ def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
             logger.warning("OpenAI falló en generación", exc_info=True)
 
     # Sin API key configurada: modo demo determinístico.
-    if not settings.gemini_api_key and not settings.openai_api_key:
+    if not settings.openrouter_api_key and not settings.gemini_api_key and not settings.openai_api_key:
         return _generar_respuesta_demo(pregunta, fuentes)
 
     # Proveedor configurado pero no disponible: avisar sin usar modo demo.
@@ -310,6 +361,56 @@ def generar_respuesta(pregunta: str, fuentes: list[dict]) -> str:
         "comunicación con el proveedor). Por favor vuelve a intentar tu consulta "
         "en unos segundos."
     )
+
+
+# Modelos OpenRouter en orden de prioridad: el primero es el configurado y los
+# siguientes son respaldo ante 429/503 o error del proveedor.
+_OPENROUTER_LLM_FALLBACKS = ["openai/gpt-4o-mini", "google/gemini-2.5-flash"]
+
+_ULTIMO_MODELO_OPENROUTER: str | None = None
+
+
+def _generar_respuesta_openrouter(pregunta: str, fuentes: list[dict]) -> str:
+    contexto = "\n\n".join(
+        f"Documento: {f['documento']}\n{f['fragmento']}" for f in fuentes[:5]
+    )
+    messages = [
+        {"role": "system", "content": CITA_INSTRUCT},
+        {"role": "user", "content": f"Contexto:\n{contexto}\n\nPregunta: {pregunta}"},
+    ]
+
+    global _ULTIMO_MODELO_OPENROUTER
+    modelos = [settings.openrouter_llm_model]
+    for modelo_extra in _OPENROUTER_LLM_FALLBACKS:
+        if modelo_extra not in modelos:
+            modelos.append(modelo_extra)
+    if _ULTIMO_MODELO_OPENROUTER in modelos:
+        modelos = [_ULTIMO_MODELO_OPENROUTER] + [m for m in modelos if m != _ULTIMO_MODELO_OPENROUTER]
+
+    ultimo_error: Exception | None = None
+    for modelo in modelos:
+        url = f"{settings.openrouter_base_url}/chat/completions"
+        payload = {
+            "model": modelo,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 700,
+        }
+        try:
+            data = _openrouter_post(url, payload)
+        except Exception as exc:
+            ultimo_error = exc
+            logger.warning("OpenRouter modelo %s falló; probando siguiente", modelo)
+            time.sleep(0.5)
+            continue
+        texto = data["choices"][0]["message"]["content"].strip()
+        if texto:
+            _ULTIMO_MODELO_OPENROUTER = modelo
+            return texto
+
+    if ultimo_error is not None:
+        raise ultimo_error
+    raise RuntimeError("OpenRouter devolvió una respuesta vacía")
 
 
 # Modelos Gemini en orden de prioridad: el primero usa más cuota, el último es
