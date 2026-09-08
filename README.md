@@ -2,6 +2,7 @@
 
 **Proyecto Integrador — Desarrollo de Aplicaciones Empresariales (VI semestre)**
 **UTS — Docente: Wilson Castaño Galviz**
+**Integrantes: Joshua (JosdaTara), Karen Lizeth Arenas Medina**
 
 ---
 
@@ -59,10 +60,9 @@ La justificación técnica de la integración de IA se encuentra en
 | 7 | `07-Manual-Tecnico-Administracion` | Manual técnico y de administración | ✅ Documentado |
 | 8 | `08-Matriz-Trazabilidad` | Trazabilidad general requisito → prueba | ✅ Documentado |
 | 9 | `09-Codigo-Fuente` | Código fuente (backend, frontend, IA, docker-compose) | ⬜ Pendiente |
-| 10 | `10-Base-Datos-Scripts` | `schema.sql`, `seed.sql` y estructura de BD | ⬜ Pendiente |
-| 11 | `11-Repositorio-Documentos-Prueba` | 30 documentos de prueba en 5 categorías | ⬜ Pendiente |
-| 12 | `12-Video-Demostracion` | Video de demostración (máx. 5 min) | ⬜ Pendiente |
-| 13 | `13-Presentacion-Sustentacion` | Presentación final y guion de sustentación | ⬜ Pendiente |
+| 10 | `10-Base-Datos-Scripts` | Scripts SQL MySQL: esquema, datos iniciales y consultas de reportes | ⬜ Pendiente |
+| 11 | `11-Repositorio-Documentos-Prueba` | 36 documentos de prueba en 5 categorías y 4 formatos | ⬜ Pendiente |
+| 12 | `12-Evidencias-Funcionamiento` | Evidencias de pruebas de funcionamiento (PDF) | ⬜ Pendiente |
 
 ## Instalación rápida
 
