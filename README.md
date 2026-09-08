@@ -2,7 +2,7 @@
 
 **Proyecto Integrador — Desarrollo de Aplicaciones Empresariales (VI semestre)**
 **UTS — Docente: Wilson Castaño Galviz**
-**Integrantes: Joshua (JosdaTara), Karen Lizeth Arenas Medina**
+**Integrantes: Joshua David Tarazona Gómez, Karen Lizeth Arenas Medina**
 
 ---
 
