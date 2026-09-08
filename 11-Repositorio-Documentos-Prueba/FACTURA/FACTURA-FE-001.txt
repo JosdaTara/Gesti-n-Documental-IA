@@ -1,0 +1,17 @@
+FACTURA DE VENTA FE-1000
+NIT proveedor: 900.123.456-7
+Proveedor: Alimentos del Valle S.A.
+Fecha de emisión: 10/01/2026
+Ciudad: Bogotá D.C.
+Subtotal: 2.148.500 COP
+IVA (19%): 408.215 COP
+Total a pagar: 2.556.715 COP
+Número de factura: FACT-2026-0142
+Medio de pago: transferencia bancaria
+Condición: 30 días
+Forma de pago: contado/crédito
+
+Resumen de ítems:
+- Producto A x 2: 1.074.250 COP
+- Producto B x 1: 1.074.250 COP
+Bienes entregados al cliente conforme a la orden de compra asociada.

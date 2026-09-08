@@ -1,0 +1,10 @@
+ORDEN DE COMPRA OC-504
+Proveedor: Maquinaria Industrial Ltda.
+NIT: 800.987.123-5
+Fecha de solicitud: 19/05/2026
+Cantidad: 82  Precio unitario: 44.000 COP
+Total de la orden: 3.608.000 COP
+Condiciones de entrega: 18 días
+Términos de pago: contado a la entrega
+Cotización de referencia: COT-8804
+Libre de fletes. Aprobada por el área de compras.

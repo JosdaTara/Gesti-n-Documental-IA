@@ -1,0 +1,17 @@
+FACTURA DE VENTA FE-1004
+NIT proveedor: 860.345.678-9
+Proveedor: Textiles Nacionales Cía.
+Fecha de emisión: 14/05/2026
+Ciudad: Bogotá D.C.
+Subtotal: 1.871.960 COP
+IVA (19%): 355.672 COP
+Total a pagar: 2.227.632 COP
+Número de factura: FACT-2026-0170
+Medio de pago: transferencia bancaria
+Condición: 30 días
+Forma de pago: contado/crédito
+
+Resumen de ítems:
+- Producto A x 6: 935.980 COP
+- Producto B x 2: 935.980 COP
+Bienes entregados al cliente conforme a la orden de compra asociada.
