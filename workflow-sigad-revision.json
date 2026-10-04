@@ -1,16 +1,21 @@
 {
+  "updatedAt": "2026-10-04T19:41:46.455Z",
+  "createdAt": "2026-10-04T18:42:54.621Z",
+  "id": "lbA2MXnUySItviib",
   "name": "SIGAD - Revisión humana de baja confianza",
-  "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "id": "sigad-webhook",
       "name": "Webhook SIGAD",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "sigad-revision",
       "parameters": {
         "httpMethod": "POST",
@@ -24,9 +29,12 @@
       "name": "Validar payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [200, 0],
+      "position": [
+        200,
+        0
+      ],
       "parameters": {
-        "jsCode": "const p = $input.first().json;\nreturn [{\n  evento: p.evento,\n  documento_id: p.documento_id,\n  documento: p.documento,\n  categoria_sugerida: p.categoria_sugerida ?? 'Sin categoría',\n  confianza: p.confianza != null ? Math.round(p.confianza * 100) : null,\n  resumen: p.resumen ?? '',\n  url_revision: p.url_revision ?? '',\n  decision: p.decision ?? '',\n  estado: p.estado ?? '',\n}];"
+        "jsCode": "const p = .first().json;\nconst d = (p && p.body && typeof p.body === 'object') ? p.body : p;\nconst nombreDoc = d.documento || d.nombre || d.titulo || 'Documento';\nconst categoria = d.categoria_sugerida || d.categoria || 'Sin categoria';\nconst confianzaNum = Number(d.confianza !== undefined && d.confianza !== null ? d.confianza : (d.score !== undefined && d.score !== null ? d.score : 0));\nconst confStr = String(confianzaNum);\nconst resumen = d.resumen || '';\nconst urlRev = d.url_revision || d.urlRevision || '';\nconst decision = d.decision || '';\nconst estado = d.estado || '';\nreturn [\n  {\n    json: {\n      ...d,\n      asunto_apertura: '[SIGAD] Revision pendiente: ' + nombreDoc + ' (' + categoria + ', ' + confStr + '% confianza)',\n      cuerpo_apertura: 'El motor de IA de SIGAD no alcanzo el umbral de confianza (70%) y el documento necesita tu decision.\\n\\nDocumento: ' + nombreDoc + '\\nCategoria sugerida: ' + categoria + '\\nConfianza: ' + confStr + '%\\nResumen IA: ' + resumen + '\\n\\nPara aprobar, corregir o rechazar abre la bandeja de revision:\\n' + urlRev,\n      asunto_cierre: '[SIGAD] Revision cerrada: ' + nombreDoc,\n      cuerpo_cierre: 'La revision del documento fue atendida.\\n\\nDocumento: ' + nombreDoc + '\\nDecision: ' + decision + '\\nEstado final: ' + estado + '\\nCategoria final: ' + categoria + '\\n\\nPuedes verificar el documento en SIGAD.'\n    }\n  }\n];\n"
       }
     },
     {
@@ -34,11 +42,17 @@
       "name": "¿Apertura o cierre?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [420, 0],
+      "position": [
+        420,
+        0
+      ],
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
           },
           "conditions": [
             {
@@ -57,42 +71,56 @@
     {
       "id": "sigad-mail-abierta",
       "name": "Correo: nueva revisión",
-      "type": "n8n-nodes-base.smtp",
+      "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
-      "position": [640, -160],
+      "position": [
+        640,
+        -160
+      ],
       "credentials": {
         "smtp": {
-          "id": "",
+          "id": "a2VsgQM803XYHnAF",
           "name": "SMTP account"
         }
       },
       "parameters": {
-        "fromEmail": "{{ $env.EMAIL_FROM }}",
-        "toEmail": "{{ $env.EMAIL_TO }}",
-        "subject": "[SIGAD] Revisión pendiente: {{ $json.documento }} ({{ $json.categoria_sugerida }}, {{ $json.confianza }}% confianza)",
-        "text": "El motor de IA de SIGAD no alcanzó el umbral de confianza (70%) y el documento necesita tu decisión.\n\nDocumento: {{ $json.documento }}\nCategoría sugerida: {{ $json.categoria_sugerida }}\nConfianza: {{ $json.confianza }}%\nResumen IA: {{ $json.resumen }}\n\nPara aprobar, corregir o rechazar abre la bandeja de revisión:\n{{ $json.url_revision }}",
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "joshuatara14@gmail.com",
+        "toEmail": "josdatarazona12@gmail.com",
+        "subject": "{{ .asunto_apertura }}",
+        "emailFormat": "text",
+        "text": "{{ .cuerpo_apertura }}",
         "options": {}
-      }
+      },
+      "webhookId": "417b4406-9d51-4e2a-be0f-e486c40b9598"
     },
     {
       "id": "sigad-mail-cerrada",
       "name": "Correo: revisión cerrada",
-      "type": "n8n-nodes-base.smtp",
+      "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2,
-      "position": [640, 160],
+      "position": [
+        640,
+        160
+      ],
       "credentials": {
         "smtp": {
-          "id": "",
+          "id": "a2VsgQM803XYHnAF",
           "name": "SMTP account"
         }
       },
       "parameters": {
-        "fromEmail": "{{ $env.EMAIL_FROM }}",
-        "toEmail": "{{ $env.EMAIL_TO }}",
-        "subject": "[SIGAD] Revisión cerrada: {{ $json.documento }}",
-        "text": "La revisión del documento fue atendida.\n\nDocumento: {{ $json.documento }}\nDecisión: {{ $json.decision }}\nEstado final: {{ $json.estado }}\nCategoría final: {{ $json.categoria_sugerida }}\n\nPuedes verificar el documento en SIGAD.",
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "joshuatara14@gmail.com",
+        "toEmail": "josdatarazona12@gmail.com",
+        "subject": "{{ .asunto_cierre }}",
+        "emailFormat": "text",
+        "text": "{{ .cuerpo_cierre }}",
         "options": {}
-      }
+      },
+      "webhookId": "c8d3b026-ed7a-4778-8894-dbe8b0ad2832"
     }
   ],
   "connections": {
@@ -137,5 +165,210 @@
       ]
     }
   },
-  "pinData": {}
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "df90e767-6e12-4e5c-9a39-85b6e6bd5ccf",
+  "activeVersionId": "cf0606c3-4adc-4788-b8f4-af0e4264b74e",
+  "versionCounter": 6,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-10-04T19:19:09.865Z",
+    "createdAt": "2026-10-04T19:19:09.865Z",
+    "versionId": "cf0606c3-4adc-4788-b8f4-af0e4264b74e",
+    "workflowId": "lbA2MXnUySItviib",
+    "nodes": [
+      {
+        "id": "sigad-webhook",
+        "name": "Webhook SIGAD",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "sigad-revision",
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "sigad-revision",
+          "responseMode": "onReceived",
+          "options": {}
+        }
+      },
+      {
+        "id": "sigad-validar",
+        "name": "Validar payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          200,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const p = $input.first().json;\nconst d = (p && p.body && typeof p.body === 'object') ? p.body : p;\nreturn [{\n  evento: d.evento,\n  documento_id: d.documento_id,\n  documento: d.documento,\n  categoria_sugerida: d.categoria_sugerida ?? 'Sin categoria',\n  confianza: d.confianza != null ? Math.round(d.confianza * 100) : null,\n  resumen: d.resumen ?? '',\n  url_revision: d.url_revision ?? '',\n  decision: d.decision ?? '',\n  estado: d.estado ?? ''\n}];"
+        }
+      },
+      {
+        "id": "sigad-if",
+        "name": "¿Apertura o cierre?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          420,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": false,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $json.evento }}",
+                "rightValue": "revision_abierta",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "sigad-mail-abierta",
+        "name": "Correo: nueva revisión",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [
+          640,
+          -160
+        ],
+        "credentials": {
+          "smtp": {
+            "id": "a2VsgQM803XYHnAF",
+            "name": "SMTP account"
+          }
+        },
+        "parameters": {
+          "resource": "email",
+          "operation": "send",
+          "fromEmail": "joshuatara14@gmail.com",
+          "toEmail": "josdatarazona12@gmail.com",
+          "subject": "[SIGAD] Revisión pendiente: {{ $json.documento }} ({{ $json.categoria_sugerida }}, {{ $json.confianza }}% confianza)",
+          "emailFormat": "text",
+          "text": "El motor de IA de SIGAD no alcanzó el umbral de confianza (70%) y el documento necesita tu decisión.\n\nDocumento: {{ $json.documento }}\nCategoría sugerida: {{ $json.categoria_sugerida }}\nConfianza: {{ $json.confianza }}%\nResumen IA: {{ $json.resumen }}\n\nPara aprobar, corregir o rechazar abre la bandeja de revisión:\n{{ $json.url_revision }}",
+          "options": {}
+        },
+        "webhookId": "6ed30461-9e27-4655-9efb-1e05598a8b9e"
+      },
+      {
+        "id": "sigad-mail-cerrada",
+        "name": "Correo: revisión cerrada",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2,
+        "position": [
+          640,
+          160
+        ],
+        "credentials": {
+          "smtp": {
+            "id": "a2VsgQM803XYHnAF",
+            "name": "SMTP account"
+          }
+        },
+        "parameters": {
+          "resource": "email",
+          "operation": "send",
+          "fromEmail": "joshuatara14@gmail.com",
+          "toEmail": "josdatarazona12@gmail.com",
+          "subject": "[SIGAD] Revisión cerrada: {{ $json.documento }}",
+          "emailFormat": "text",
+          "text": "La revisión del documento fue atendida.\n\nDocumento: {{ $json.documento }}\nDecisión: {{ $json.decision }}\nEstado final: {{ $json.estado }}\nCategoría final: {{ $json.categoria_sugerida }}\n\nPuedes verificar el documento en SIGAD.",
+          "options": {}
+        },
+        "webhookId": "d54d7357-a0f8-4e27-8112-425a526e5493"
+      }
+    ],
+    "connections": {
+      "Webhook SIGAD": {
+        "main": [
+          [
+            {
+              "node": "Validar payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validar payload": {
+        "main": [
+          [
+            {
+              "node": "¿Apertura o cierre?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "¿Apertura o cierre?": {
+        "main": [
+          [
+            {
+              "node": "Correo: nueva revisión",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Correo: revisión cerrada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "SIGAD Admin",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "scopes": [
+    "execution:delete",
+    "execution:list",
+    "execution:read",
+    "execution:reveal",
+    "workflow:create",
+    "workflow:delete",
+    "workflow:disableRedaction",
+    "workflow:enableRedaction",
+    "workflow:execute",
+    "workflow:execute-chat",
+    "workflow:export",
+    "workflow:import",
+    "workflow:list",
+    "workflow:move",
+    "workflow:publish",
+    "workflow:read",
+    "workflow:share",
+    "workflow:unpublish",
+    "workflow:unshare",
+    "workflow:update"
+  ],
+  "checksum": "cd2ec668487ae8ff3164d3450edc9b59e57df6ffba47f45d0f35ee0b56b8745b"
 }
