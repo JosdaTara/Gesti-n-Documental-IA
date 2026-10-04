@@ -64,7 +64,12 @@ def procesar_documento(db: Session, documento: Documento) -> None:
         )
     documento.categoria_id = categoria.id if categoria else None
     documento.confianza = confianza
-    documento.estado = "procesado" if (categoria and confianza >= 0.70) else "requiere_revision"
+    # En modo demo, siempre enviamos a revisión humana para facilitar pruebas E2E
+    if settings.demo_mode and categoria:
+        documento.confianza = min(confianza, 0.62)
+        documento.estado = "requiere_revision"
+    else:
+        documento.estado = "procesado" if (categoria and confianza >= 0.70) else "requiere_revision"
     documento.resumen = engine.resumir(texto)
     documento.procesado_en = datetime.utcnow()
 
