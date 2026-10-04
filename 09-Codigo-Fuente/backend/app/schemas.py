@@ -83,6 +83,15 @@ class ClasificacionIn(BaseModel):
     categoria_id: int
 
 
+DecisionRevision = Literal["APROBAR", "CORREGIR", "RECHAZAR"]
+
+
+class RevisionIn(BaseModel):
+    decision: DecisionRevision
+    categoria_final_id: int | None = None
+    comentario: str = Field(default="", max_length=500)
+
+
 class BusquedaOut(BaseModel):
     id: int
     documento: str

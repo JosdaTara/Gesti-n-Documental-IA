@@ -10,9 +10,16 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models import Categoria, Chunk, Documento, Usuario
-from app.schemas import ClasificacionIn, DocumentoDetail, DocumentoOut, EstadoDocumento
-from app.services import documento_detail, documento_out, procesar_documento, reasignar_categoria, registrar_auditoria
+from app.models import Categoria, Chunk, Documento, Revision, Usuario
+from app.schemas import ClasificacionIn, DocumentoDetail, DocumentoOut, EstadoDocumento, RevisionIn
+from app.services import (
+    documento_detail,
+    documento_out,
+    procesar_documento,
+    reasignar_categoria,
+    registrar_auditoria,
+    revisar_documento,
+)
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
 
@@ -134,6 +141,27 @@ def reclasificar(
     )
     db.refresh(documento)
     return documento_out(documento)
+
+
+@router.post("/{documento_id}/revision", response_model=DocumentoOut)
+def revisar(
+    documento_id: int,
+    body: RevisionIn,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    documento = db.get(Documento, documento_id)
+    if documento is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Documento no encontrado")
+    if documento.estado != "requiere_revision":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Solo se pueden revisar documentos con estado requiere_revision",
+        )
+    try:
+        return revisar_documento(db, documento, body, usuario)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.delete("/{documento_id}", status_code=status.HTTP_204_NO_CONTENT)

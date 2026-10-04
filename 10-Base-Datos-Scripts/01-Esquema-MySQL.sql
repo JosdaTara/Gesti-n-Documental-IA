@@ -132,3 +132,29 @@ CREATE TABLE IF NOT EXISTS consultas (
     CONSTRAINT fk_consultas_usuario FOREIGN KEY (usuario_id)
         REFERENCES usuarios (id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- REVISIONES: revisión humana de documentos con confianza < 70%.
+--  Genera la automatización con n8n (workflow-sigad-revision.json).
+--  decision: APROBAR | CORREGIR | RECHAZAR
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS revisiones (
+    id                 INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    documento_id       INT UNSIGNED NOT NULL,
+    categoria_sugerida VARCHAR(60)  NULL,
+    confianza          DECIMAL(4, 3) NULL,
+    decision           VARCHAR(20)  NOT NULL,
+    categoria_final_id INT UNSIGNED NULL,
+    comentario         TEXT         NULL,
+    revisado_por       INT UNSIGNED NULL,
+    creado_en          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_revisiones_documento (documento_id),
+    KEY ix_revisiones_revisado_por (revisado_por),
+    CONSTRAINT fk_revisiones_documento FOREIGN KEY (documento_id)
+        REFERENCES documentos (id) ON DELETE CASCADE,
+    CONSTRAINT fk_revisiones_categoria FOREIGN KEY (categoria_final_id)
+        REFERENCES categorias (id),
+    CONSTRAINT fk_revisiones_usuario FOREIGN KEY (revisado_por)
+        REFERENCES usuarios (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

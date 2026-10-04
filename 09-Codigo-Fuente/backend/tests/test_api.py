@@ -120,3 +120,113 @@ def test_eliminar_documento():
     response = client.delete(f"/api/documentos/{doc_id}", headers=_auth())
     assert response.status_code == 204
     assert client.get(f"/api/documentos/{doc_id}", headers=_auth()).status_code == 404
+
+
+# ---------------------------------------------------------------- revisión humana (n8n)
+
+
+def _subir_baja_confianza() -> int:
+    """Documento sin palabras clave de ninguna categoría → requiere_revision."""
+    contenido = (
+        "Memorando interno de la compañía.\n"
+        "Se informa al personal sobre la actualización de políticas de archivado.\n"
+        "Este documento no corresponde a ninguna de las categorías comerciales predeterminadas."
+    )
+    r = client.post(
+        "/api/documentos",
+        headers=_auth(),
+        files={"archivo": ("memorando.txt", contenido.encode("utf-8"), "text/plain")},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_baja_confianza_queda_en_revision():
+    doc_id = _subir_baja_confianza()
+    data = client.get(f"/api/documentos/{doc_id}", headers=_auth()).json()
+    assert data["estado"] == "requiere_revision"
+    assert data["confianza"] < 0.7
+    # No aparece en búsqueda semántica mientras esté en revisión
+    resultados = client.get("/api/busqueda", params={"q": "políticas de archivado", "tipo": "keyword"}).json()
+    assert all(r["id"] != doc_id for r in resultados)
+
+
+def test_revision_aprobar():
+    doc_id = _subir_baja_confianza()
+    r = client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(),
+                    json={"decision": "APROBAR", "comentario": "Clasificación correcta"})
+    assert r.status_code == 200, r.text
+    assert r.json()["estado"] == "procesado"
+    assert r.json()["confianza"] == 1.0
+
+
+def test_revision_corregir():
+    doc_id = _subir_baja_confianza()
+    cats = client.get("/api/categorias").json()
+    factura = next(c["id"] for c in cats if c["nombre"] == "FACTURA")
+    r = client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(),
+                    json={"decision": "CORREGIR", "categoria_final_id": factura,
+                          "comentario": "Corrige a factura"})
+    assert r.status_code == 200, r.text
+    assert r.json()["estado"] == "procesado"
+    assert r.json()["categoria"] == "FACTURA"
+
+
+def test_revision_corregir_sin_categoria_es_422():
+    doc_id = _subir_baja_confianza()
+    r = client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(),
+                    json={"decision": "CORREGIR"})
+    assert r.status_code == 422
+
+
+def test_revision_rechazar_no_se_indexa():
+    doc_id = _subir_baja_confianza()
+    r = client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(),
+                    json={"decision": "RECHAZAR", "comentario": "Documento irrelevante"})
+    assert r.status_code == 200
+    assert r.json()["estado"] == "rechazado"
+    resultados = client.get("/api/busqueda", params={"q": "archivado", "tipo": "keyword"}).json()
+    assert all(x["id"] != doc_id for x in resultados)
+
+
+def test_revision_409_si_no_esta_en_revision():
+    # Rechazado previamente ya no puede volver a revisarse
+    doc_id = _subir_baja_confianza()
+    client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(), json={"decision": "RECHAZAR"})
+    r = client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(), json={"decision": "APROBAR"})
+    assert r.status_code == 409
+
+
+def test_revision_requiere_autenticacion():
+    doc_id = _subir_baja_confianza()
+    r = client.post(f"/api/documentos/{doc_id}/revision", json={"decision": "APROBAR"})
+    assert r.status_code == 401
+
+
+def test_webhook_fallido_no_rompe_carga(monkeypatch):
+    from app import services
+
+    class _Falla:
+        def post(self, *a, **k):
+            raise ConnectionError("n8n no disponible")
+
+    monkeypatch.setattr(services.settings, "n8n_webhook_url", "http://localhost:1/webhook")
+    monkeypatch.setattr(services.httpx, "post", _Falla().post)
+    doc_id = _subir_baja_confianza()
+    # El documento se procesa igual; el fallo queda solo en auditoría
+    assert doc_id > 0
+    auditoria = client.get("/api/auditoria", headers=_auth()).json()
+    assert any(a["accion"] == "n8n.webhook_error" for a in auditoria)
+
+
+def test_revision_registra_historial():
+    doc_id = _subir_baja_confianza()
+    client.post(f"/api/documentos/{doc_id}/revision", headers=_auth(),
+                json={"decision": "RECHAZAR", "comentario": "Fuera de alcance"})
+    from app.core.database import SessionLocal
+    from app.models import Revision
+    with SessionLocal() as db:
+        fila = db.query(Revision).filter_by(documento_id=doc_id).first()
+        assert fila is not None
+        assert fila.decision == "RECHAZAR"
+        assert fila.comentario == "Fuera de alcance"

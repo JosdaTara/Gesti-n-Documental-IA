@@ -1,0 +1,141 @@
+{
+  "name": "SIGAD - Revisión humana de baja confianza",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sigad-webhook",
+      "name": "Webhook SIGAD",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "sigad-revision",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sigad-revision",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "sigad-validar",
+      "name": "Validar payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0],
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nreturn [{\n  evento: p.evento,\n  documento_id: p.documento_id,\n  documento: p.documento,\n  categoria_sugerida: p.categoria_sugerida ?? 'Sin categoría',\n  confianza: p.confianza != null ? Math.round(p.confianza * 100) : null,\n  resumen: p.resumen ?? '',\n  url_revision: p.url_revision ?? '',\n  decision: p.decision ?? '',\n  estado: p.estado ?? '',\n}];"
+      }
+    },
+    {
+      "id": "sigad-if",
+      "name": "¿Apertura o cierre?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.evento }}",
+              "rightValue": "revision_abierta",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "sigad-mail-abierta",
+      "name": "Correo: nueva revisión",
+      "type": "n8n-nodes-base.smtp",
+      "typeVersion": 2,
+      "position": [640, -160],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      },
+      "parameters": {
+        "fromEmail": "{{ $env.EMAIL_FROM }}",
+        "toEmail": "{{ $env.EMAIL_TO }}",
+        "subject": "[SIGAD] Revisión pendiente: {{ $json.documento }} ({{ $json.categoria_sugerida }}, {{ $json.confianza }}% confianza)",
+        "text": "El motor de IA de SIGAD no alcanzó el umbral de confianza (70%) y el documento necesita tu decisión.\n\nDocumento: {{ $json.documento }}\nCategoría sugerida: {{ $json.categoria_sugerida }}\nConfianza: {{ $json.confianza }}%\nResumen IA: {{ $json.resumen }}\n\nPara aprobar, corregir o rechazar abre la bandeja de revisión:\n{{ $json.url_revision }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "sigad-mail-cerrada",
+      "name": "Correo: revisión cerrada",
+      "type": "n8n-nodes-base.smtp",
+      "typeVersion": 2,
+      "position": [640, 160],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP account"
+        }
+      },
+      "parameters": {
+        "fromEmail": "{{ $env.EMAIL_FROM }}",
+        "toEmail": "{{ $env.EMAIL_TO }}",
+        "subject": "[SIGAD] Revisión cerrada: {{ $json.documento }}",
+        "text": "La revisión del documento fue atendida.\n\nDocumento: {{ $json.documento }}\nDecisión: {{ $json.decision }}\nEstado final: {{ $json.estado }}\nCategoría final: {{ $json.categoria_sugerida }}\n\nPuedes verificar el documento en SIGAD.",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook SIGAD": {
+      "main": [
+        [
+          {
+            "node": "Validar payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar payload": {
+      "main": [
+        [
+          {
+            "node": "¿Apertura o cierre?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Apertura o cierre?": {
+      "main": [
+        [
+          {
+            "node": "Correo: nueva revisión",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Correo: revisión cerrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

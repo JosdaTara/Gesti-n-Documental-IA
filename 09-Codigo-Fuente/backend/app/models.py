@@ -84,6 +84,24 @@ class Chunk(Base):
     documento: Mapped[Documento] = relationship(back_populates="chunks")
 
 
+class Revision(Base):
+    __tablename__ = "revisiones"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    documento_id: Mapped[int] = mapped_column(ForeignKey("documentos.id", ondelete="CASCADE"), index=True)
+    categoria_sugerida: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    confianza: Mapped[float | None] = mapped_column(Float, nullable=True)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)  # APROBAR | CORREGIR | RECHAZAR
+    categoria_final_id: Mapped[int | None] = mapped_column(ForeignKey("categorias.id"), nullable=True)
+    comentario: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revisado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    creado_en: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    documento: Mapped[Documento] = relationship()
+    categoria_final: Mapped[Categoria | None] = relationship()
+    revisor: Mapped[Usuario | None] = relationship()
+
+
 class Auditoria(Base):
     __tablename__ = "auditoria"
 

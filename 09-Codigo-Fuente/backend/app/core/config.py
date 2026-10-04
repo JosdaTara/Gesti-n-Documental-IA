@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    n8n_webhook_url: str = ""
+    frontend_url: str = "http://localhost:5173"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value):

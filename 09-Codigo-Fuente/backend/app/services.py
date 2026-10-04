@@ -1,17 +1,49 @@
 from datetime import datetime
 
+import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import ensure_storage
 from app.core.security import to_iso
 from app.ia import engine
-from app.models import Auditoria, Categoria, MetadatoDocumento, Chunk, Documento
+from app.models import Auditoria, Categoria, MetadatoDocumento, Chunk, Documento, Revision, Usuario
 
 
 def registrar_auditoria(db: Session, usuario_id: int | None, accion: str, detalle: str | None, ip: str | None = None) -> None:
     db.add(Auditoria(usuario_id=usuario_id, accion=accion, detalle=detalle, ip=ip))
     db.commit()
+
+
+def _notificar_n8n(payload: dict) -> bool:
+    """POST fire-and-forget al webhook de n8n. Nunca rompe el flujo del documento.
+
+    Devuelve True si se entregó (o no había webhook configurado). Si falla,
+    deja registro en auditoria; los reintentos los asume n8n de forma reactiva.
+    """
+    if not settings.n8n_webhook_url:
+        return True
+    try:
+        httpx.post(settings.n8n_webhook_url, json=payload, timeout=8.0)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _notificar_revision_abierta(db: Session, documento: Documento, categoria_nombre: str | None) -> None:
+    payload = {
+        "evento": "revision_abierta",
+        "documento_id": documento.id,
+        "documento": documento.nombre_archivo,
+        "categoria_sugerida": categoria_nombre,
+        "confianza": documento.confianza,
+        "resumen": documento.resumen,
+        "url_revision": f"{settings.frontend_url}/revision",
+    }
+    ok = _notificar_n8n(payload)
+    accion = "n8n.revision_abierta" if ok else "n8n.webhook_error"
+    registrar_auditoria(db, None, accion, documento.nombre_archivo)
 
 
 def procesar_documento(db: Session, documento: Documento) -> None:
@@ -57,6 +89,68 @@ def procesar_documento(db: Session, documento: Documento) -> None:
         db.add(MetadatoDocumento(documento_id=documento.id, clave=clave, valor=valor))
 
     db.commit()
+
+    if documento.estado == "requiere_revision":
+        _notificar_revision_abierta(db, documento, categoria.nombre if categoria else None)
+
+
+def revisar_documento(db: Session, documento: Documento, body, usuario: Usuario) -> dict:
+    """Aplica la decisión humana sobre un documento en requiere_revision.
+
+    - APROBAR: conserva la categoría sugerida y pasa a procesado.
+    - CORREGIR: asigna categoria_final_id al documento y pasa a procesado.
+    - RECHAZAR: deja el documento en rechazado (no se indexa).
+    Registra auditoria, guarda el historial en `revisiones` y notifica a n8n.
+    """
+    if body.decision == "CORREGIR" and body.categoria_final_id is None:
+        raise ValueError("CORREGIR requiere categoria_final_id")
+
+    db.add(
+        Revision(
+            documento_id=documento.id,
+            categoria_sugerida=documento.categoria.nombre if documento.categoria else None,
+            confianza=documento.confianza,
+            decision=body.decision,
+            categoria_final_id=body.categoria_final_id,
+            comentario=body.comentario or None,
+            revisado_por=usuario.id,
+        )
+    )
+
+    if body.decision == "APROBAR":
+        documento.estado = "procesado"
+        documento.confianza = 1.0
+        accion = "documento.aprobar"
+    elif body.decision == "CORREGIR":
+        documento.categoria_id = body.categoria_final_id
+        documento.estado = "procesado"
+        documento.confianza = 1.0
+        accion = "documento.corregir"
+    else:
+        documento.estado = "rechazado"
+        accion = "documento.rechazar"
+
+    db.commit()
+
+    registrar_auditoria(db, usuario.id, accion, f"{documento.nombre_archivo} -> {documento.estado}")
+
+    if settings.n8n_webhook_url:
+        ok = _notificar_n8n(
+            {
+                "evento": "revision_cerrada",
+                "documento_id": documento.id,
+                "documento": documento.nombre_archivo,
+                "decision": body.decision,
+                "estado": documento.estado,
+                "categoria_final": documento.categoria.nombre if documento.categoria else None,
+                "url_revision": f"{settings.frontend_url}/revision",
+            }
+        )
+        registrar_auditoria(db, usuario.id, "n8n.revision_cerrada" if ok else "n8n.webhook_error",
+                            documento.nombre_archivo)
+
+    db.refresh(documento)
+    return documento_out(documento)
 
 
 def reasignar_categoria(db: Session, documento: Documento, categoria_id: int) -> None:

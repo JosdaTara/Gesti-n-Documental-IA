@@ -11,6 +11,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Documentos from "./pages/Documentos";
+import RevisarDocumentos from "./pages/RevisarDocumentos";
 import Busqueda from "./pages/Busqueda";
 import Chat from "./pages/Chat";
 import Usuarios from "./pages/Usuarios";
@@ -76,6 +77,7 @@ export default function App() {
               <Route index element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="documentos" element={<Documentos />} />
+              <Route path="revision" element={<RevisarDocumentos />} />
               <Route path="busqueda" element={<Busqueda />} />
               <Route path="chat" element={<Chat />} />
               <Route

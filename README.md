@@ -64,6 +64,34 @@ La justificación técnica de la integración de IA se encuentra en
 | 11 | `11-Repositorio-Documentos-Prueba` | 36 documentos de prueba en 5 categorías y 4 formatos | ⬜ Pendiente |
 | 12 | `12-Evidencias-Funcionamiento` | Evidencias de pruebas de funcionamiento (PDF) | ⬜ Pendiente |
 
+## Automatización con n8n — Revisión humana inteligente
+
+Cuando la clasificación IA tiene **confianza < 70 %**, el documento queda en estado
+`requiere_revision` (no se indexa en búsqueda semántica ni en el RAG). SIGAD dispara un
+**webhook a n8n**, que avisa al analista por correo; el humano aprueba, corrige o rechaza en
+la vista **Revisión** del frontend y SIGAD actualiza estado, categoría, auditoría y el
+historial en `revisiones`.
+
+**Flujo:** `clasificación < 70% → requiere_revision → webhook n8n → correo → revisión en SIGAD (/app/revision) → decisión → proceso → notificación de cierre`
+
+- **Endpoint nuevo:** `POST /api/documentos/{id}/revision` (roles administrador y analista)
+  con `{"decision": "APROBAR" | "CORREGIR" | "RECHAZAR", "categoria_final_id"?, "comentario"?}`.
+- **Eventos webhook a n8n:** `revision_abierta` (al entrar en revisión) y `revision_cerrada`
+  (al resolverse). Se configuran en `backend/.env`:
+  `N8N_WEBHOOK_URL=http://localhost:5678/webhook/sigad-revision` y `FRONTEND_URL=...`.
+- **Workflow n8n:** `workflow-sigad-revision.json` (raíz) — importar en n8n con
+  *Import from File*. Nodos: `Webhook` → `Validar payload` (Code) → `¿Apertura o cierre?`
+  (IF) → `Correo` (SMTP). Las ramas envían el aviso de nueva revisión o de cierre.
+- **Configurar en n8n:** credencial SMTP (o Gmail) en el nodo `Correo`; variables de entorno
+  `EMAIL_FROM` y `EMAIL_TO`. Probar con el botón *Listen for test event* del nodo Webhook.
+- **Tabla nueva:** `revisiones` (ver `10-Base-Datos-Scripts/01-Esquema-MySQL.sql`).
+- El webhook es *fire-and-forget*: si n8n está caído, SIGAD sigue funcionando y registra
+  `n8n.webhook_error` en auditoría.
+
+Pruebas automatizadas del backend: los casos de revisión (aprobar/corregir/rechazar, 409 si
+no está en revisión, permisos y tolerancia a fallo del webhook) están en
+`backend/tests/test_api.py`.
+
 ## Instalación rápida
 
 > Requiere Docker Desktop y una API key de OpenAI (para embeddings y LLM).

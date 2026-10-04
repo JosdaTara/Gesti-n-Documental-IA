@@ -35,6 +35,7 @@ export default function Navbar() {
     ? [
         { to: "/app/dashboard", label: "Dashboard" },
         { to: "/app/documentos", label: "Documentos" },
+        { to: "/app/revision", label: "Revisión" },
         { to: "/app/busqueda", label: "Búsqueda" },
         { to: "/app/chat", label: "Asistente IA" },
         ...(usuario.rol === "administrador"

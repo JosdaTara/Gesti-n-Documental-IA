@@ -142,9 +142,23 @@ export function errorMessage(error: unknown): string {
     }
     if (!error.response) return "No se pudo conectar con el servidor.";
     if (error.response.status === 401) return "Credenciales incorrectas o sesión expirada.";
+    if (error.response.status === 409) return "El documento ya no está en revisión.";
     if (error.response.status === 413) return "El archivo supera el tamaño máximo permitido.";
     if (error.response.status === 415) return "El formato del archivo no está permitido.";
     return "Ocurrió un error al comunicarse con el servidor.";
   }
   return "Ocurrió un error inesperado.";
+}
+
+export type DecisionRevision = "APROBAR" | "CORREGIR" | "RECHAZAR";
+
+export interface RevisionIn {
+  decision: DecisionRevision;
+  categoria_final_id?: number;
+  comentario?: string;
+}
+
+export async function revisarDocumento(documentoId: number, body: RevisionIn): Promise<Documento> {
+  const { data } = await api.post<Documento>(`/documentos/${documentoId}/revision`, body);
+  return data;
 }
