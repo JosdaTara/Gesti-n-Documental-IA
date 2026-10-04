@@ -39,7 +39,7 @@ def _notificar_revision_abierta(db: Session, documento: Documento, categoria_nom
         "categoria_sugerida": categoria_nombre,
         "confianza": documento.confianza,
         "resumen": documento.resumen,
-        "url_revision": f"{settings.frontend_url}/revision",
+        "url_revision": f"{settings.frontend_url}/app/revision",
     }
     ok = _notificar_n8n(payload)
     accion = "n8n.revision_abierta" if ok else "n8n.webhook_error"
@@ -143,7 +143,7 @@ def revisar_documento(db: Session, documento: Documento, body, usuario: Usuario)
                 "decision": body.decision,
                 "estado": documento.estado,
                 "categoria_final": documento.categoria.nombre if documento.categoria else None,
-                "url_revision": f"{settings.frontend_url}/revision",
+                "url_revision": f"{settings.frontend_url}/app/revision",
             }
         )
         registrar_auditoria(db, usuario.id, "n8n.revision_cerrada" if ok else "n8n.webhook_error",

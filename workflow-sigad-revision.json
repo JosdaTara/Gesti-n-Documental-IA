@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-10-04T19:41:46.455Z",
+  "updatedAt": "2026-10-04T21:48:13.410Z",
   "createdAt": "2026-10-04T18:42:54.621Z",
   "id": "lbA2MXnUySItviib",
   "name": "SIGAD - Revisión humana de baja confianza",
@@ -8,6 +8,11 @@
   "isArchived": false,
   "nodes": [
     {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sigad-revision",
+        "options": {}
+      },
       "id": "sigad-webhook",
       "name": "Webhook SIGAD",
       "type": "n8n-nodes-base.webhook",
@@ -16,13 +21,7 @@
         0,
         0
       ],
-      "webhookId": "sigad-revision",
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "sigad-revision",
-        "responseMode": "onReceived",
-        "options": {}
-      }
+      "webhookId": "sigad-revision"
     },
     {
       "id": "sigad-validar",
@@ -34,7 +33,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const p = .first().json;\nconst d = (p && p.body && typeof p.body === 'object') ? p.body : p;\nconst nombreDoc = d.documento || d.nombre || d.titulo || 'Documento';\nconst categoria = d.categoria_sugerida || d.categoria || 'Sin categoria';\nconst confianzaNum = Number(d.confianza !== undefined && d.confianza !== null ? d.confianza : (d.score !== undefined && d.score !== null ? d.score : 0));\nconst confStr = String(confianzaNum);\nconst resumen = d.resumen || '';\nconst urlRev = d.url_revision || d.urlRevision || '';\nconst decision = d.decision || '';\nconst estado = d.estado || '';\nreturn [\n  {\n    json: {\n      ...d,\n      asunto_apertura: '[SIGAD] Revision pendiente: ' + nombreDoc + ' (' + categoria + ', ' + confStr + '% confianza)',\n      cuerpo_apertura: 'El motor de IA de SIGAD no alcanzo el umbral de confianza (70%) y el documento necesita tu decision.\\n\\nDocumento: ' + nombreDoc + '\\nCategoria sugerida: ' + categoria + '\\nConfianza: ' + confStr + '%\\nResumen IA: ' + resumen + '\\n\\nPara aprobar, corregir o rechazar abre la bandeja de revision:\\n' + urlRev,\n      asunto_cierre: '[SIGAD] Revision cerrada: ' + nombreDoc,\n      cuerpo_cierre: 'La revision del documento fue atendida.\\n\\nDocumento: ' + nombreDoc + '\\nDecision: ' + decision + '\\nEstado final: ' + estado + '\\nCategoria final: ' + categoria + '\\n\\nPuedes verificar el documento en SIGAD.'\n    }\n  }\n];\n"
+        "jsCode": "const entrada = $input.first().json;\nconst p = (entrada && entrada.body && typeof entrada.body === 'object') ? entrada.body : entrada;\n\nconst esc = (v) => String(v === null || v === undefined ? '' : v)\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\"/g, '&quot;');\n\nconst txt = (v, alt) => {\n  const s = String(v === null || v === undefined ? '' : v).trim();\n  return s.length ? s : (alt || '-');\n};\n\n// La confianza llega como fracción (0.62) desde SIGAD; se muestra en porcentaje (62).\nlet confianza = Number(p.confianza);\nif (!isFinite(confianza)) {\n  const score = Number(p.score);\n  confianza = isFinite(score) ? score : 0;\n}\nconst pct = Math.max(0, Math.min(100, Math.round(confianza > 0 && confianza <= 1 ? confianza * 100 : confianza)));\nconst pctTexto = String(pct);\nconst bajoUmbral = pct < 70;\n\nconst documento = txt(p.documento || p.nombre || p.titulo, 'Documento sin nombre');\nconst resumen = txt(p.resumen, 'Sin resumen generado por el motor de IA.');\nconst decision = txt(p.decision);\nconst estado = txt(p.estado);\nconst urlRevision = txt(p.url_revision || p.urlRevision);\nconst esApertura = String(p.evento || '') === 'revision_abierta';\n\nconst categoriaSugerida = esApertura\n  ? txt(p.categoria_sugerida || p.categoria)\n  : txt(p.categoria_final || p.categoria_sugerida || p.categoria);\n\nconst ACENTO = bajoUmbral ? '#d97706' : '#059669';\nconst BARRA_BG = '#e5e7eb';\nconst COLOR_ESTADO = { procesado: '#059669', rechazado: '#b91c1c' }[estado] || '#111827';\nconst BADGE = {\n  APROBAR: ['#065f46', '#d1fae5'],\n  CORREGIR: ['#1e40af', '#dbeafe'],\n  RECHAZAR: ['#991b1b', '#fee2e2'],\n};\nconst badgeDecision = (() => {\n  if (!decision) return '-';\n  const b = BADGE[String(decision).toUpperCase()] || ['#374151', '#f3f4f6'];\n  return '<span style=\"display:inline-block;padding:3px 12px;border-radius:999px;background:' + b[1] + ';color:' + b[0] + ';font-weight:700;font-size:13px;letter-spacing:.3px;\">' + esc(decision) + '</span>';\n})();\n\nconst th = (e) => '<td width=\"34%\" style=\"padding:11px 16px;background:#f9fafb;color:#6b7280;font-size:13px;font-weight:600;border-bottom:1px solid #e5e7eb;\">' + e + '</td>';\nconst td = (v) => '<td style=\"padding:11px 16px;color:#111827;font-size:14px;border-bottom:1px solid #e5e7eb;\">' + v + '</td>';\nconst fila = (etiqueta, valor) => '<tr>' + th(etiqueta) + td(valor) + '</tr>';\nconst tabla = (filas) => '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;border:1px solid #e5e7eb;\">' + filas + '</table>';\n\nconst cabecera = (color, titulo, sub) =>\n  '<div style=\"background:' + color + ';padding:22px 24px;\">'\n  + '<div style=\"color:#ffffff;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;opacity:.85;font-weight:600;\">SIGAD &middot; Gesti&oacute;n Documental IA</div>'\n  + '<div style=\"color:#ffffff;font-size:23px;font-weight:700;margin-top:6px;line-height:1.3;\">' + titulo + '</div>'\n  + '<div style=\"color:#ffffff;font-size:13px;margin-top:5px;opacity:.92;\">' + sub + '</div>'\n  + '</div>';\n\nconst barra = (etiqueta, nota) =>\n  '<div style=\"margin:20px 0 2px;\">'\n  + '<div style=\"font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:8px;\">' + etiqueta + '</div>'\n  + '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr>'\n  + '<td width=\"' + pctTexto + '%\" style=\"background:' + ACENTO + ';height:9px;font-size:0;line-height:0;\">&nbsp;</td>'\n  + '<td style=\"background:' + BARRA_BG + ';height:9px;font-size:0;line-height:0;\">&nbsp;</td>'\n  + '</tr></table>'\n  + '<div style=\"font-size:13px;color:#4b5563;margin-top:9px;\"><strong style=\"color:#111827;font-size:15px;\">' + pctTexto + '%</strong> &mdash; ' + nota + '</div>'\n  + '</div>';\n\nconst bloqueResumen =\n  '<div style=\"margin-top:22px;padding:14px 16px;background:#f9fafb;border-left:4px solid ' + ACENTO + ';border-radius:4px;\">'\n  + '<div style=\"font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.7px;font-weight:600;\">Resumen IA</div>'\n  + '<div style=\"margin-top:7px;color:#111827;font-size:14px;line-height:1.65;\">' + esc(resumen).replace(/\\r?\\n/g, '<br>') + '</div>'\n  + '</div>';\n\nconst boton = (url, etiqueta, bg) => url\n  ? '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr><td style=\"padding:24px 0 4px;text-align:center;\">'\n    + '<a href=\"' + esc(url) + '\" style=\"background:' + bg + ';color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;font-size:15px;display:inline-block;\">' + etiqueta + '</a>'\n    + '<div style=\"padding-top:10px;color:#9ca3af;font-size:11px;\">' + esc(url) + '</div>'\n    + '</td></tr></table>'\n  : '';\n\nconst pie =\n  '<div style=\"background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 24px;\">'\n  + '<p style=\"margin:0;color:#9ca3af;font-size:11px;line-height:1.6;\">Notificaci&oacute;n autom&aacute;tica generada por <strong style=\"color:#6b7280;\">SIGAD</strong> &middot; Desarrollo de Aplicaciones Empresariales &middot; UTS.<br>Este correo no es monitoreado; no lo respondas.</p>'\n  + '</div>';\n\nconst shell = (contenido) =>\n  '<div style=\"margin:0;padding:26px 14px;background:#f3f4f6;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">'\n  + '<div style=\"max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;\">'\n  + contenido + pie\n  + '</div></div>';\n\nconst htmlApertura = shell(\n  cabecera('#b45309', 'Revisi&oacute;n pendiente', 'El documento necesita una decisi&oacute;n humana')\n  + '<div style=\"padding:26px 24px;\">'\n  + '<p style=\"margin:0 0 18px;color:#374151;font-size:15px;line-height:1.65;\">El motor de IA <strong>no alcanz&oacute; el umbral de confianza del 70%</strong>, por lo que el documento qued&oacute; en estado <strong>requiere revisi&oacute;n</strong>. Ingresa a SIGAD para aprobarlo, corregirlo o rechazarlo.</p>'\n  + tabla(\n    fila('Documento', '<strong>' + esc(documento) + '</strong>')\n    + fila('Categor&iacute;a sugerida', esc(categoriaSugerida))\n  )\n  + barra('Confianza de la clasificaci&oacute;n', 'por debajo del umbral requerido (70%)')\n  + bloqueResumen\n  + boton(urlRevision, 'Revisar documento en SIGAD', '#2563eb')\n  + '</div>'\n);\n\nconst htmlCierre = shell(\n  cabecera('#047857', 'Revisi&oacute;n cerrada', 'La revisi&oacute;n del documento fue atendida')\n  + '<div style=\"padding:26px 24px;\">'\n  + '<p style=\"margin:0 0 18px;color:#374151;font-size:15px;line-height:1.65;\">La revisi&oacute;n fue completada y el documento qued&oacute; con el siguiente resultado:</p>'\n  + tabla(\n    fila('Documento', '<strong>' + esc(documento) + '</strong>')\n    + fila('Decisi&oacute;n', badgeDecision)\n    + fila('Estado final', '<strong style=\"color:' + COLOR_ESTADO + ';\">' + esc(estado) + '</strong>')\n    + fila('Categor&iacute;a final', esc(categoriaSugerida))\n  )\n  + '<div style=\"margin-top:22px;padding:14px 16px;background:#ecfdf5;border-left:4px solid #10b981;border-radius:4px;color:#065f46;font-size:14px;line-height:1.6;\">'\n  + 'El documento ya no est&aacute; pendiente de revisi&oacute;n y fue incorporado al cat&aacute;logo con la categor&iacute;a final indicada.'\n  + '</div>'\n  + boton(urlRevision, 'Ver documento en SIGAD', '#047857')\n  + '</div>'\n);\n\nconst textoApertura = 'SIGAD \\u00b7 Revisi\\u00f3n pendiente\\n\\n'\n  + 'El motor de IA de SIGAD no alcanz\\u00f3 el umbral de confianza (70%) y el documento necesita tu decisi\\u00f3n.\\n\\n'\n  + 'Documento: ' + documento + '\\n'\n  + 'Categor\\u00eda sugerida: ' + categoriaSugerida + '\\n'\n  + 'Confianza: ' + pctTexto + '% (umbral 70%)\\n\\n'\n  + 'Resumen IA:\\n' + resumen + '\\n\\n'\n  + (urlRevision ? 'Revisar en: ' + urlRevision : 'Abre SIGAD para aprobar, corregir o rechazar el documento.');\n\nconst textoCierre = 'SIGAD \\u00b7 Revisi\\u00f3n cerrada\\n\\n'\n  + 'La revisi\\u00f3n del documento fue atendida.\\n\\n'\n  + 'Documento: ' + documento + '\\n'\n  + 'Decisi\\u00f3n: ' + decision + '\\n'\n  + 'Estado final: ' + estado + '\\n'\n  + 'Categor\\u00eda final: ' + categoriaSugerida + '\\n\\n'\n  + 'El documento ya no est\\u00e1 pendiente de revisi\\u00f3n.';\n\nreturn [{\n  json: {\n    ...p,\n    evento: p.evento,\n    documento_id: p.documento_id,\n    documento,\n    confianza_ia: Number(confianza),\n    confianza_pct: pct,\n    categoria_sugerida: categoriaSugerida,\n    url_revision: urlRevision,\n    asunto_apertura: '[SIGAD] Revisi\\u00f3n pendiente: ' + documento + ' (' + pctTexto + '% confianza)',\n    cuerpo_apertura: textoApertura,\n    cuerpo_apertura_html: htmlApertura,\n    asunto_cierre: '[SIGAD] Revisi\\u00f3n cerrada: ' + documento,\n    cuerpo_cierre: textoCierre,\n    cuerpo_cierre_html: htmlCierre\n  }\n}];\n"
       }
     },
     {
@@ -88,11 +87,11 @@
         "operation": "send",
         "fromEmail": "joshuatara14@gmail.com",
         "toEmail": "josdatarazona12@gmail.com",
-        "subject": "{{ .asunto_apertura }}",
+        "subject": "={{ $json.asunto_apertura }}",
         "emailFormat": "both",
-        "text": "{{ .cuerpo_apertura }}",
-        "options": {},
-        "html": "{{ .cuerpo_apertura_html }}"
+        "text": "={{ $json.cuerpo_apertura }}",
+        "html": "={{ $json.cuerpo_apertura_html }}",
+        "options": {}
       },
       "webhookId": "417b4406-9d51-4e2a-be0f-e486c40b9598"
     },
@@ -116,11 +115,11 @@
         "operation": "send",
         "fromEmail": "joshuatara14@gmail.com",
         "toEmail": "josdatarazona12@gmail.com",
-        "subject": "{{ .asunto_cierre }}",
+        "subject": "={{ $json.asunto_cierre }}",
         "emailFormat": "both",
-        "text": "{{ .cuerpo_cierre }}",
-        "options": {},
-        "html": "{{ .cuerpo_cierre_html }}"
+        "text": "={{ $json.cuerpo_cierre }}",
+        "html": "={{ $json.cuerpo_cierre_html }}",
+        "options": {}
       },
       "webhookId": "c8d3b026-ed7a-4778-8894-dbe8b0ad2832"
     }
@@ -168,25 +167,31 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
   "staticData": null,
   "meta": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "df90e767-6e12-4e5c-9a39-85b6e6bd5ccf",
-  "activeVersionId": "cf0606c3-4adc-4788-b8f4-af0e4264b74e",
-  "versionCounter": 6,
+  "versionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
+  "activeVersionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
+  "versionCounter": 8,
   "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-10-04T19:19:09.865Z",
-    "createdAt": "2026-10-04T19:19:09.865Z",
-    "versionId": "cf0606c3-4adc-4788-b8f4-af0e4264b74e",
+    "updatedAt": "2026-10-04T21:34:21.823Z",
+    "createdAt": "2026-10-04T21:34:21.823Z",
+    "versionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
     "workflowId": "lbA2MXnUySItviib",
     "nodes": [
       {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "sigad-revision",
+          "options": {}
+        },
         "id": "sigad-webhook",
         "name": "Webhook SIGAD",
         "type": "n8n-nodes-base.webhook",
@@ -195,13 +200,7 @@
           0,
           0
         ],
-        "webhookId": "sigad-revision",
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "sigad-revision",
-          "responseMode": "onReceived",
-          "options": {}
-        }
+        "webhookId": "sigad-revision"
       },
       {
         "id": "sigad-validar",
@@ -213,7 +212,7 @@
           0
         ],
         "parameters": {
-          "jsCode": "const p = $input.first().json;\nconst d = (p && p.body && typeof p.body === 'object') ? p.body : p;\nreturn [{\n  evento: d.evento,\n  documento_id: d.documento_id,\n  documento: d.documento,\n  categoria_sugerida: d.categoria_sugerida ?? 'Sin categoria',\n  confianza: d.confianza != null ? Math.round(d.confianza * 100) : null,\n  resumen: d.resumen ?? '',\n  url_revision: d.url_revision ?? '',\n  decision: d.decision ?? '',\n  estado: d.estado ?? ''\n}];"
+          "jsCode": "const entrada = $input.first().json;\nconst p = (entrada && entrada.body && typeof entrada.body === 'object') ? entrada.body : entrada;\n\nconst esc = (v) => String(v === null || v === undefined ? '' : v)\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\"/g, '&quot;');\n\nconst txt = (v, alt) => {\n  const s = String(v === null || v === undefined ? '' : v).trim();\n  return s.length ? s : (alt || '-');\n};\n\n// La confianza llega como fracción (0.62) desde SIGAD; se muestra en porcentaje (62).\nlet confianza = Number(p.confianza);\nif (!isFinite(confianza)) {\n  const score = Number(p.score);\n  confianza = isFinite(score) ? score : 0;\n}\nconst pct = Math.max(0, Math.min(100, Math.round(confianza > 0 && confianza <= 1 ? confianza * 100 : confianza)));\nconst pctTexto = String(pct);\nconst bajoUmbral = pct < 70;\n\nconst documento = txt(p.documento || p.nombre || p.titulo, 'Documento sin nombre');\nconst resumen = txt(p.resumen, 'Sin resumen generado por el motor de IA.');\nconst decision = txt(p.decision);\nconst estado = txt(p.estado);\nconst urlRevision = txt(p.url_revision || p.urlRevision);\nconst esApertura = String(p.evento || '') === 'revision_abierta';\n\nconst categoriaSugerida = esApertura\n  ? txt(p.categoria_sugerida || p.categoria)\n  : txt(p.categoria_final || p.categoria_sugerida || p.categoria);\n\nconst ACENTO = bajoUmbral ? '#d97706' : '#059669';\nconst BARRA_BG = '#e5e7eb';\nconst COLOR_ESTADO = { procesado: '#059669', rechazado: '#b91c1c' }[estado] || '#111827';\nconst BADGE = {\n  APROBAR: ['#065f46', '#d1fae5'],\n  CORREGIR: ['#1e40af', '#dbeafe'],\n  RECHAZAR: ['#991b1b', '#fee2e2'],\n};\nconst badgeDecision = (() => {\n  if (!decision) return '-';\n  const b = BADGE[String(decision).toUpperCase()] || ['#374151', '#f3f4f6'];\n  return '<span style=\"display:inline-block;padding:3px 12px;border-radius:999px;background:' + b[1] + ';color:' + b[0] + ';font-weight:700;font-size:13px;letter-spacing:.3px;\">' + esc(decision) + '</span>';\n})();\n\nconst th = (e) => '<td width=\"34%\" style=\"padding:11px 16px;background:#f9fafb;color:#6b7280;font-size:13px;font-weight:600;border-bottom:1px solid #e5e7eb;\">' + e + '</td>';\nconst td = (v) => '<td style=\"padding:11px 16px;color:#111827;font-size:14px;border-bottom:1px solid #e5e7eb;\">' + v + '</td>';\nconst fila = (etiqueta, valor) => '<tr>' + th(etiqueta) + td(valor) + '</tr>';\nconst tabla = (filas) => '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;border:1px solid #e5e7eb;\">' + filas + '</table>';\n\nconst cabecera = (color, titulo, sub) =>\n  '<div style=\"background:' + color + ';padding:22px 24px;\">'\n  + '<div style=\"color:#ffffff;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;opacity:.85;font-weight:600;\">SIGAD &middot; Gesti&oacute;n Documental IA</div>'\n  + '<div style=\"color:#ffffff;font-size:23px;font-weight:700;margin-top:6px;line-height:1.3;\">' + titulo + '</div>'\n  + '<div style=\"color:#ffffff;font-size:13px;margin-top:5px;opacity:.92;\">' + sub + '</div>'\n  + '</div>';\n\nconst barra = (etiqueta, nota) =>\n  '<div style=\"margin:20px 0 2px;\">'\n  + '<div style=\"font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:8px;\">' + etiqueta + '</div>'\n  + '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr>'\n  + '<td width=\"' + pctTexto + '%\" style=\"background:' + ACENTO + ';height:9px;font-size:0;line-height:0;\">&nbsp;</td>'\n  + '<td style=\"background:' + BARRA_BG + ';height:9px;font-size:0;line-height:0;\">&nbsp;</td>'\n  + '</tr></table>'\n  + '<div style=\"font-size:13px;color:#4b5563;margin-top:9px;\"><strong style=\"color:#111827;font-size:15px;\">' + pctTexto + '%</strong> &mdash; ' + nota + '</div>'\n  + '</div>';\n\nconst bloqueResumen =\n  '<div style=\"margin-top:22px;padding:14px 16px;background:#f9fafb;border-left:4px solid ' + ACENTO + ';border-radius:4px;\">'\n  + '<div style=\"font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.7px;font-weight:600;\">Resumen IA</div>'\n  + '<div style=\"margin-top:7px;color:#111827;font-size:14px;line-height:1.65;\">' + esc(resumen).replace(/\\r?\\n/g, '<br>') + '</div>'\n  + '</div>';\n\nconst boton = (url, etiqueta, bg) => url\n  ? '<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr><td style=\"padding:24px 0 4px;text-align:center;\">'\n    + '<a href=\"' + esc(url) + '\" style=\"background:' + bg + ';color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:700;font-size:15px;display:inline-block;\">' + etiqueta + '</a>'\n    + '<div style=\"padding-top:10px;color:#9ca3af;font-size:11px;\">' + esc(url) + '</div>'\n    + '</td></tr></table>'\n  : '';\n\nconst pie =\n  '<div style=\"background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 24px;\">'\n  + '<p style=\"margin:0;color:#9ca3af;font-size:11px;line-height:1.6;\">Notificaci&oacute;n autom&aacute;tica generada por <strong style=\"color:#6b7280;\">SIGAD</strong> &middot; Desarrollo de Aplicaciones Empresariales &middot; UTS.<br>Este correo no es monitoreado; no lo respondas.</p>'\n  + '</div>';\n\nconst shell = (contenido) =>\n  '<div style=\"margin:0;padding:26px 14px;background:#f3f4f6;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;\">'\n  + '<div style=\"max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;\">'\n  + contenido + pie\n  + '</div></div>';\n\nconst htmlApertura = shell(\n  cabecera('#b45309', 'Revisi&oacute;n pendiente', 'El documento necesita una decisi&oacute;n humana')\n  + '<div style=\"padding:26px 24px;\">'\n  + '<p style=\"margin:0 0 18px;color:#374151;font-size:15px;line-height:1.65;\">El motor de IA <strong>no alcanz&oacute; el umbral de confianza del 70%</strong>, por lo que el documento qued&oacute; en estado <strong>requiere revisi&oacute;n</strong>. Ingresa a SIGAD para aprobarlo, corregirlo o rechazarlo.</p>'\n  + tabla(\n    fila('Documento', '<strong>' + esc(documento) + '</strong>')\n    + fila('Categor&iacute;a sugerida', esc(categoriaSugerida))\n  )\n  + barra('Confianza de la clasificaci&oacute;n', 'por debajo del umbral requerido (70%)')\n  + bloqueResumen\n  + boton(urlRevision, 'Revisar documento en SIGAD', '#2563eb')\n  + '</div>'\n);\n\nconst htmlCierre = shell(\n  cabecera('#047857', 'Revisi&oacute;n cerrada', 'La revisi&oacute;n del documento fue atendida')\n  + '<div style=\"padding:26px 24px;\">'\n  + '<p style=\"margin:0 0 18px;color:#374151;font-size:15px;line-height:1.65;\">La revisi&oacute;n fue completada y el documento qued&oacute; con el siguiente resultado:</p>'\n  + tabla(\n    fila('Documento', '<strong>' + esc(documento) + '</strong>')\n    + fila('Decisi&oacute;n', badgeDecision)\n    + fila('Estado final', '<strong style=\"color:' + COLOR_ESTADO + ';\">' + esc(estado) + '</strong>')\n    + fila('Categor&iacute;a final', esc(categoriaSugerida))\n  )\n  + '<div style=\"margin-top:22px;padding:14px 16px;background:#ecfdf5;border-left:4px solid #10b981;border-radius:4px;color:#065f46;font-size:14px;line-height:1.6;\">'\n  + 'El documento ya no est&aacute; pendiente de revisi&oacute;n y fue incorporado al cat&aacute;logo con la categor&iacute;a final indicada.'\n  + '</div>'\n  + boton(urlRevision, 'Ver documento en SIGAD', '#047857')\n  + '</div>'\n);\n\nconst textoApertura = 'SIGAD \\u00b7 Revisi\\u00f3n pendiente\\n\\n'\n  + 'El motor de IA de SIGAD no alcanz\\u00f3 el umbral de confianza (70%) y el documento necesita tu decisi\\u00f3n.\\n\\n'\n  + 'Documento: ' + documento + '\\n'\n  + 'Categor\\u00eda sugerida: ' + categoriaSugerida + '\\n'\n  + 'Confianza: ' + pctTexto + '% (umbral 70%)\\n\\n'\n  + 'Resumen IA:\\n' + resumen + '\\n\\n'\n  + (urlRevision ? 'Revisar en: ' + urlRevision : 'Abre SIGAD para aprobar, corregir o rechazar el documento.');\n\nconst textoCierre = 'SIGAD \\u00b7 Revisi\\u00f3n cerrada\\n\\n'\n  + 'La revisi\\u00f3n del documento fue atendida.\\n\\n'\n  + 'Documento: ' + documento + '\\n'\n  + 'Decisi\\u00f3n: ' + decision + '\\n'\n  + 'Estado final: ' + estado + '\\n'\n  + 'Categor\\u00eda final: ' + categoriaSugerida + '\\n\\n'\n  + 'El documento ya no est\\u00e1 pendiente de revisi\\u00f3n.';\n\nreturn [{\n  json: {\n    ...p,\n    evento: p.evento,\n    documento_id: p.documento_id,\n    documento,\n    confianza_ia: Number(confianza),\n    confianza_pct: pct,\n    categoria_sugerida: categoriaSugerida,\n    url_revision: urlRevision,\n    asunto_apertura: '[SIGAD] Revisi\\u00f3n pendiente: ' + documento + ' (' + pctTexto + '% confianza)',\n    cuerpo_apertura: textoApertura,\n    cuerpo_apertura_html: htmlApertura,\n    asunto_cierre: '[SIGAD] Revisi\\u00f3n cerrada: ' + documento,\n    cuerpo_cierre: textoCierre,\n    cuerpo_cierre_html: htmlCierre\n  }\n}];\n"
         }
       },
       {
@@ -267,12 +266,13 @@
           "operation": "send",
           "fromEmail": "joshuatara14@gmail.com",
           "toEmail": "josdatarazona12@gmail.com",
-          "subject": "[SIGAD] Revisión pendiente: {{ $json.documento }} ({{ $json.categoria_sugerida }}, {{ $json.confianza }}% confianza)",
-          "emailFormat": "text",
-          "text": "El motor de IA de SIGAD no alcanzó el umbral de confianza (70%) y el documento necesita tu decisión.\n\nDocumento: {{ $json.documento }}\nCategoría sugerida: {{ $json.categoria_sugerida }}\nConfianza: {{ $json.confianza }}%\nResumen IA: {{ $json.resumen }}\n\nPara aprobar, corregir o rechazar abre la bandeja de revisión:\n{{ $json.url_revision }}",
+          "subject": "={{ $json.asunto_apertura }}",
+          "emailFormat": "both",
+          "text": "={{ $json.cuerpo_apertura }}",
+          "html": "={{ $json.cuerpo_apertura_html }}",
           "options": {}
         },
-        "webhookId": "6ed30461-9e27-4655-9efb-1e05598a8b9e"
+        "webhookId": "417b4406-9d51-4e2a-be0f-e486c40b9598"
       },
       {
         "id": "sigad-mail-cerrada",
@@ -294,12 +294,13 @@
           "operation": "send",
           "fromEmail": "joshuatara14@gmail.com",
           "toEmail": "josdatarazona12@gmail.com",
-          "subject": "[SIGAD] Revisión cerrada: {{ $json.documento }}",
-          "emailFormat": "text",
-          "text": "La revisión del documento fue atendida.\n\nDocumento: {{ $json.documento }}\nDecisión: {{ $json.decision }}\nEstado final: {{ $json.estado }}\nCategoría final: {{ $json.categoria_sugerida }}\n\nPuedes verificar el documento en SIGAD.",
+          "subject": "={{ $json.asunto_cierre }}",
+          "emailFormat": "both",
+          "text": "={{ $json.cuerpo_cierre }}",
+          "html": "={{ $json.cuerpo_cierre_html }}",
           "options": {}
         },
-        "webhookId": "d54d7357-a0f8-4e27-8112-425a526e5493"
+        "webhookId": "c8d3b026-ed7a-4778-8894-dbe8b0ad2832"
       }
     ],
     "connections": {
@@ -348,7 +349,33 @@
     "authors": "SIGAD Admin",
     "name": null,
     "description": null,
-    "autosaved": false
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-10-04T21:34:21.916Z",
+        "id": 24,
+        "workflowId": "lbA2MXnUySItviib",
+        "versionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
+        "event": "activated",
+        "userId": "77fb9868-e7f2-4033-9972-073b8e6db272"
+      },
+      {
+        "createdAt": "2026-10-04T21:48:13.557Z",
+        "id": 26,
+        "workflowId": "lbA2MXnUySItviib",
+        "versionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
+        "event": "activated",
+        "userId": "77fb9868-e7f2-4033-9972-073b8e6db272"
+      },
+      {
+        "createdAt": "2026-10-04T21:48:13.556Z",
+        "id": 25,
+        "workflowId": "lbA2MXnUySItviib",
+        "versionId": "93f9b815-1248-4dfb-adad-4947eb35a9f6",
+        "event": "deactivated",
+        "userId": "77fb9868-e7f2-4033-9972-073b8e6db272"
+      }
+    ]
   },
   "scopes": [
     "execution:delete",
