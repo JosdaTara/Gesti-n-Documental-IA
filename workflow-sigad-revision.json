@@ -89,9 +89,10 @@
         "fromEmail": "joshuatara14@gmail.com",
         "toEmail": "josdatarazona12@gmail.com",
         "subject": "{{ .asunto_apertura }}",
-        "emailFormat": "text",
+        "emailFormat": "both",
         "text": "{{ .cuerpo_apertura }}",
-        "options": {}
+        "options": {},
+        "html": "{{ .cuerpo_apertura_html }}"
       },
       "webhookId": "417b4406-9d51-4e2a-be0f-e486c40b9598"
     },
@@ -116,9 +117,10 @@
         "fromEmail": "joshuatara14@gmail.com",
         "toEmail": "josdatarazona12@gmail.com",
         "subject": "{{ .asunto_cierre }}",
-        "emailFormat": "text",
+        "emailFormat": "both",
         "text": "{{ .cuerpo_cierre }}",
-        "options": {}
+        "options": {},
+        "html": "{{ .cuerpo_cierre_html }}"
       },
       "webhookId": "c8d3b026-ed7a-4778-8894-dbe8b0ad2832"
     }
