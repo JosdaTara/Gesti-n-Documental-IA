@@ -66,31 +66,43 @@ La justificación técnica de la integración de IA se encuentra en
 
 ## Automatización con n8n — Revisión humana inteligente
 
-Cuando la clasificación IA tiene **confianza < 70 %**, el documento queda en estado
-`requiere_revision` (no se indexa en búsqueda semántica ni en el RAG). SIGAD dispara un
-**webhook a n8n**, que avisa al analista por correo; el humano aprueba, corrige o rechaza en
-la vista **Revisión** del frontend y SIGAD actualiza estado, categoría, auditoría y el
-historial en `revisiones`.
+La clasificación con confianza < 70% activa una revisión humana inteligente: SIGAD envía un webhook a n8n para notificar al analista por correo. El humano resuelve en `/app/revision` y SIGAD envía el evento de cierre para notificarlo.
 
-**Flujo:** `clasificación < 70% → requiere_revision → webhook n8n → correo → revisión en SIGAD (/app/revision) → decisión → proceso → notificación de cierre`
+### Flujo
+`clasificación < 70% → requiere_revision → webhook n8n → correo → revisión en SIGAD (/app/revision) → decisión → proceso → notificación de cierre`
 
-- **Endpoint nuevo:** `POST /api/documentos/{id}/revision` (roles administrador y analista)
-  con `{"decision": "APROBAR" | "CORREGIR" | "RECHAZAR", "categoria_final_id"?, "comentario"?}`.
-- **Eventos webhook a n8n:** `revision_abierta` (al entrar en revisión) y `revision_cerrada`
-  (al resolverse). Se configuran en `backend/.env`:
-  `N8N_WEBHOOK_URL=http://localhost:5678/webhook/sigad-revision` y `FRONTEND_URL=...`.
-- **Workflow n8n:** `workflow-sigad-revision.json` (raíz) — importar en n8n con
-  *Import from File*. Nodos: `Webhook` → `Validar payload` (Code) → `¿Apertura o cierre?`
-  (IF) → `Correo` (SMTP). Las ramas envían el aviso de nueva revisión o de cierre.
-- **Configurar en n8n:** credencial SMTP (o Gmail) en el nodo `Correo`; variables de entorno
-  `EMAIL_FROM` y `EMAIL_TO`. Probar con el botón *Listen for test event* del nodo Webhook.
-- **Tabla nueva:** `revisiones` (ver `10-Base-Datos-Scripts/01-Esquema-MySQL.sql`).
-- El webhook es *fire-and-forget*: si n8n está caído, SIGAD sigue funcionando y registra
-  `n8n.webhook_error` en auditoría.
+### Nodos
+| Nodo | Tipo | Rol |
+|---|---|---|
+| Webhook SIGAD | `n8n-nodes-base.webhook` (v2) | POST `/webhook/sigad-revision`. Recibe `evento`, `documento_id`, `documento`, `categoria_sugerida`, `confianza`, `resumen`, `url_revision`, `decision`, `estado` (cuerpo en `body`). |
+| Validar payload | `n8n-nodes-base.code` | Normaliza (`p.body ?? p`). Genera `asunto_*`, `cuerpo_*` (texto plano) y `cuerpo_*_html` (HTML inline). Escapa contenido para evitar inyección HTML. |
+| ¿Apertura o cierre? | `n8n-nodes-base.if` (v2) | `{{$json.evento}} == 'revision_abierta'` → true=apertura, false=cierre. |
+| Correo: nueva revisión | `n8n-nodes-base.emailSend` (v2) | Envía aviso pendiente (formato `both`: HTML + texto plano) vía SMTP. |
+| Correo: revisión cerrada | `n8n-nodes-base.emailSend` (v2) | Envía aviso de cierre (formato `both`: HTML + texto plano) vía SMTP. |
 
-Pruebas automatizadas del backend: los casos de revisión (aprobar/corregir/rechazar, 409 si
-no está en revisión, permisos y tolerancia a fallo del webhook) están en
-`backend/tests/test_api.py`.
+### Diagrama
+```mermaid
+flowchart LR
+  A[Webhook SIGAD
+POST /webhook/sigad-revision] --> B[Validar payload
+Normaliza + genera HTML/texto]
+  B --> C{"¿Apertura o cierre?
+{{$json.evento}} == 'revision_abierta'"}
+  C --true--> D[Correo: nueva revisión
+HTML+texto]
+  C --false--> E[Correo: revisión cerrada
+HTML+texto]
+```
+
+### Conexiones
+- `Webhook SIGAD.main` → `Validar payload.main`
+- `Validar payload.main` → `¿Apertura o cierre?.main`
+- `¿Apertura o cierre?.main[0]` → `Correo: nueva revisión.main`
+- `¿Apertura o cierre?.main[1]` → `Correo: revisión cerrada.main`
+
+### Notas
+- Eventos: `revision_abierta` / `revision_cerrada`. Webhook *fire-and-forget*. Si n8n no está disponible, SIGAD registra `n8n.webhook_error` en auditoría.
+- Workflow: `workflow-sigad-revision.json` (raíz). n8n v2.41.6 usa draft/published (activar tras importar). `webhookId: sigad-revision`.
 
 ## Instalación rápida
 
